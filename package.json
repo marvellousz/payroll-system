@@ -4,11 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
+    "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
+    "seed": "tsx --env-file=.env prisma/seed.ts",
+    "desktop:prepare": "node scripts/prepare-desktop.mjs",
     "tauri": "tauri",
-    "seed": "tsx --env-file=.env prisma/seed.ts"
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"
@@ -28,6 +32,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

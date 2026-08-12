@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# tauri / desktop bundle artifacts
+src-tauri/target/
+src-tauri/resources/server/
+src-tauri/resources/node
+src-tauri/resources/node.exe
+src-tauri/resources/_node_tmp/
