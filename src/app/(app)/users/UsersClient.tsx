@@ -1,0 +1,250 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { Plus, X } from "lucide-react";
+import Dropdown from "@/components/Dropdown";
+
+interface UserProfile {
+  id: string;
+  email: string;
+  username: string;
+  role: "admin" | "staff";
+  created_at: string;
+}
+
+function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
+  if (!open) return null;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export default function UsersClient() {
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [formData, setFormData] = useState({
+    username: "",
+    email: "",
+    password: "",
+    role: "staff" as "admin" | "staff",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function fetchUsers() {
+    setLoading(true);
+    fetch("/api/users")
+      .then((r) => r.json())
+      .then((data) => setUsers(Array.isArray(data) ? data : []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  function openAdd() {
+    setFormData({ username: "", email: "", password: "", role: "staff" });
+    setError("");
+    setShowAdd(true);
+  }
+
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!formData.username || !formData.email || !formData.password) {
+      setError("Username, email, and password are required.");
+      return;
+    }
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: formData.username.trim().toLowerCase(),
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
+          role: formData.role,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create user.");
+        return;
+      }
+      setShowAdd(false);
+      fetchUsers();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteUser(user: UserProfile) {
+    if (!confirm(`Are you sure you want to remove user "${user.username}"?`)) return;
+    const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
+    if (res.ok) {
+      fetchUsers();
+    } else {
+      const d = await res.json();
+      alert(d.error || "Failed to delete user.");
+    }
+  }
+
+  return (
+    <div className="page-content animate-fade-in">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">User Management</h1>
+          <p className="page-subtitle">Add and manage organization users (Admin only)</p>
+        </div>
+        <button className="btn btn-primary" onClick={openAdd}>
+          <Plus size={18} strokeWidth={2} />
+          Add User
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
+          <span className="spinner spinner-lg" />
+        </div>
+      ) : users.length === 0 ? (
+        <div className="empty-state">
+          <p className="empty-state__title">No users found</p>
+        </div>
+      ) : (
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Created At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td>
+                    <div className="flex items-center gap-2 font-medium">
+                      <div style={{
+                        width: "30px", height: "30px", borderRadius: "50%",
+                        background: "var(--color-primary)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontWeight: 700, color: "#fff", fontSize: "0.8125rem", flexShrink: 0,
+                      }}>
+                        {u.username.charAt(0).toUpperCase()}
+                      </div>
+                      {u.username}
+                    </div>
+                  </td>
+                  <td className="text-secondary">{u.email}</td>
+                  <td>
+                    <span className={`badge ${u.role === "admin" ? "badge-accent" : "badge-neutral"}`} style={{ textTransform: "uppercase" }}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="text-muted text-xs">
+                    {new Date(u.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                  </td>
+                  <td>
+                    <button className="btn btn-danger btn-sm" onClick={() => handleDeleteUser(u)}>
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add User Modal */}
+      <Modal open={showAdd} onClose={() => setShowAdd(false)}>
+        <div className="modal-header">
+          <h2>Add New User</h2>
+          <button className="btn btn-ghost btn-icon" onClick={() => setShowAdd(false)} aria-label="Close">
+<X size={18} strokeWidth={2} />
+          </button>
+        </div>
+
+        <form onSubmit={handleCreateUser} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          {error && <div className="alert alert-danger">{error}</div>}
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="user-username">Username</label>
+            <input
+              id="user-username"
+              type="text"
+              className="form-input"
+              placeholder="e.g. john_doe"
+              value={formData.username}
+              onChange={(e) => setFormData((f) => ({ ...f, username: e.target.value }))}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="user-email">Email</label>
+            <input
+              id="user-email"
+              type="email"
+              className="form-input"
+              placeholder="e.g. john@example.com"
+              value={formData.email}
+              onChange={(e) => setFormData((f) => ({ ...f, email: e.target.value }))}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="user-password">Password</label>
+            <input
+              id="user-password"
+              type="password"
+              className="form-input"
+              placeholder="Minimum 8 characters"
+              value={formData.password}
+              onChange={(e) => setFormData((f) => ({ ...f, password: e.target.value }))}
+              required
+              minLength={8}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="user-role">Role</label>
+            <Dropdown
+            value={formData.role}
+            onChange={(v) => setFormData((f) => ({ ...f, role: v }))}
+            options={[
+              { value: "staff", label: "Staff (Standard access)" },
+              { value: "admin", label: "Admin (Full system access)" },
+            ]}
+            label="Role"
+          />
+          </div>
+
+          <div className="modal-footer" style={{ border: "none", padding: 0, margin: 0, marginTop: "0.5rem" }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? <><span className="spinner" />Creating…</> : "Create User"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}
