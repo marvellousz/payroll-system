@@ -68,14 +68,7 @@ export default function LoginPage() {
       </div>
 
       {/* Flat Poster Card */}
-      <div
-        style={{
-          background: "#FFFFFF",
-          border: "3px solid #111827",
-          borderRadius: "16px",
-          padding: "2.25rem",
-        }}
-      >
+      <div className="login-card">
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           {error && (
             <div className="alert alert-danger" role="alert">

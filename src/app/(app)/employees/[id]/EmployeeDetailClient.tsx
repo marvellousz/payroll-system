@@ -189,8 +189,8 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
       {/* Month Payroll Section */}
       <div className="flex justify-between items-start mb-4 flex-wrap gap-3">
         <h2 className="text-lg font-bold">Monthly Overview</h2>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="segmented" role="group" aria-label="View mode">
+        <div className="flex items-center gap-3 flex-wrap" style={{ width: "100%", maxWidth: "100%" }}>
+          <div className="segmented" role="group" aria-label="View mode" style={{ flex: "1 1 auto" }}>
             <button
               type="button"
               className={`segmented__btn ${view === "summary" ? "active" : ""}`}
@@ -208,7 +208,7 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
               Full Month View
             </button>
           </div>
-          <div className="month-nav">
+          <div className="month-nav" style={{ flex: "1 1 auto", justifyContent: "space-between" }}>
             <button className="btn btn-ghost btn-icon" onClick={prevMonth} aria-label="Previous month">
               <ChevronLeft size={18} strokeWidth={2} />
             </button>

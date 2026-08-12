@@ -192,16 +192,18 @@ export default function OutletsClient() {
         <div className="grid-2">
           {outlets.map((outlet) => (
             <div key={outlet.id} className="card">
-              <div className="flex items-center justify-between mb-4">
+              <div className="card-header-row mb-4">
                 <div>
                   <h3 className="font-semibold">{outlet.name}</h3>
                   <p className="text-secondary text-sm">
                     {outlet._count?.employees ?? 0} employee{(outlet._count?.employees ?? 0) === 1 ? "" : "s"}
                   </p>
                 </div>
-                <button className="btn btn-secondary btn-sm" onClick={() => openEdit(outlet)}>
-                  Edit Settings
-                </button>
+                <div className="card-header-row__actions">
+                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(outlet)}>
+                    Edit Settings
+                  </button>
+                </div>
               </div>
 
               <div style={{ background: "var(--color-surface-2)", borderRadius: "var(--radius-md)", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>

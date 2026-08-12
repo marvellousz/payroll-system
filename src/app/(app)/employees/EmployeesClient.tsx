@@ -195,7 +195,7 @@ export default function EmployeesClient() {
                     <span className="badge badge-accent">{emp.paid_leave_days} Days</span>
                   </td>
                   <td>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button className="btn btn-secondary btn-sm" onClick={() => openEdit(emp)}>Edit</button>
                       <a href={`/attendance?employee=${emp.id}`} className="btn btn-outline btn-sm">Attendance</a>
                       <button className="btn btn-danger btn-sm" onClick={() => handleDelete(emp)}>Delete</button>

@@ -154,8 +154,8 @@ export default function DashboardClient() {
                 return (
                   <div key={emp.id} className="card">
                     {/* Header */}
-                    <div className="flex items-center justify-between mb-4 pb-4 border-b">
-                      <div className="flex items-center gap-3">
+                    <div className="card-header-row mb-4 pb-4 border-b">
+                      <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
                         <div
                           style={{
                             width: "44px", height: "44px", borderRadius: "50%",
@@ -166,20 +166,22 @@ export default function DashboardClient() {
                         >
                           {emp.name.charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="font-bold text-lg">{emp.name}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="font-bold text-lg truncate">{emp.name}</div>
                           <div className="text-secondary text-sm font-medium">
                             Monthly: {formatINR(Number(emp.monthly_salary))} · Paid Leave: {emp.paid_leave_days}d
                           </div>
                         </div>
                       </div>
-                      <a href={`/employees/${emp.id}`} className="btn btn-secondary btn-sm">
-                        View Details →
-                      </a>
+                      <div className="card-header-row__actions">
+                        <a href={`/employees/${emp.id}`} className="btn btn-secondary btn-sm">
+                          View Details →
+                        </a>
+                      </div>
                     </div>
 
                     {p ? (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+                      <div className="payroll-split" style={{ gap: "1.5rem" }}>
                         {/* Pay Breakdown */}
                         <div>
                           <div className="text-muted text-xs font-bold uppercase mb-2">

@@ -154,22 +154,22 @@ export default function PayrollClient() {
             return (
               <div key={emp.id} className="card">
                 {/* Employee header */}
-                <div className="flex items-center justify-between" style={{ marginBottom: "1.25rem" }}>
-                  <div className="flex items-center gap-3">
+                <div className="card-header-row" style={{ marginBottom: "1.25rem" }}>
+                  <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
                     <div style={{
                       width: "42px", height: "42px", borderRadius: "50%",
                       background: "var(--color-primary)",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontWeight: 700, color: "#fff", fontSize: "1.0625rem",
+                      fontWeight: 700, color: "#fff", fontSize: "1.0625rem", flexShrink: 0,
                     }}>
                       {emp.name.charAt(0).toUpperCase()}
                     </div>
-                    <div>
-                      <div className="font-semibold" style={{ fontSize: "1.0625rem" }}>{emp.name}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="font-semibold truncate" style={{ fontSize: "1.0625rem" }}>{emp.name}</div>
                       <div className="text-muted text-sm">Monthly: {formatINR(Number(emp.monthly_salary))}</div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="card-header-row__actions">
                     <button className="btn btn-secondary btn-sm" onClick={() => setPaymentFor(emp)}>
                       + Record Payment
                     </button>
@@ -180,7 +180,7 @@ export default function PayrollClient() {
                 </div>
 
                 {p ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+                  <div className="payroll-split">
                     {/* Pay Breakdown */}
                     <div>
                       <div className="text-muted text-xs font-semibold mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>

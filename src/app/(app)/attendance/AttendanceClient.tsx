@@ -134,7 +134,7 @@ export default function AttendanceClient() {
 
       {/* Selector Controls */}
       <div className="flex gap-4 flex-wrap mb-6 items-end">
-        <div className="form-group" style={{ flex: "0 1 360px", minWidth: "220px", maxWidth: "360px" }}>
+        <div className="form-group" style={{ flex: "1 1 220px", minWidth: "0", maxWidth: "360px", width: "100%" }}>
           <Dropdown
             value={selectedEmployee}
             onChange={setSelectedEmployee}
@@ -147,7 +147,7 @@ export default function AttendanceClient() {
 
       {/* Stats Cards */}
       {selectedEmployee && (
-        <div className="grid-3 mb-6" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+        <div className="grid-3 mb-6">
           <div className="card-flat-emerald">
             <div className="stat-card__label text-emerald">Present</div>
             <div className="stat-card__value text-emerald">{presentCount}</div>
@@ -173,7 +173,9 @@ export default function AttendanceClient() {
             <span className="spinner spinner-lg" />
           </div>
         ) : (
-          <div className="card" style={{ padding: "1.5rem" }}>
+          <div className="card" style={{ padding: "1.25rem" }}>
+            <div className="attendance-scroll">
+              <div className="attendance-scroll__inner">
             {/* Headers */}
             <div className="attendance-grid" style={{ marginBottom: "0.75rem" }}>
               {DAY_LABELS.map((d) => (
@@ -259,13 +261,15 @@ export default function AttendanceClient() {
                           fontSize: "0.75rem",
                           fontWeight: "800",
                           textAlign: "center",
-                          minHeight: "28px",
+                          minHeight: "36px",
                         }}
                       />
                     )}
                   </div>
                 );
               })}
+            </div>
+              </div>
             </div>
 
             {/* Legend */}
