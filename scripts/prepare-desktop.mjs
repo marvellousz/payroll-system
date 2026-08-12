@@ -179,7 +179,11 @@ async function main() {
   log("Generating Prisma client…");
   execSync("npx prisma generate", { cwd: root, stdio: "inherit", env: process.env });
   log("Building Next.js (standalone)…");
-  execSync("npx next build", { cwd: root, stdio: "inherit", env: process.env });
+  execSync("npx next build", {
+    cwd: root,
+    stdio: "inherit",
+    env: { ...process.env, DESKTOP_BUILD: "1" },
+  });
   stageStandalone();
   await fetchPortableNode();
   writeLoadingPage();
