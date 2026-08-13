@@ -14,6 +14,11 @@ interface Employee {
   name: string;
   monthly_salary: string;
   paid_leave_days: number;
+  salary_hidden?: boolean;
+}
+
+interface Me {
+  role: string;
 }
 
 function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -29,18 +34,25 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 
 export default function EmployeesClient() {
   const { selectedOutletId } = useOutlets();
+  const { data: me } = useSWR<Me>(swrKeys.me());
+  const isAdmin = me?.role === "admin";
   const { data, isLoading, mutate } = useSWR<Employee[]>(
     selectedOutletId ? swrKeys.employees(selectedOutletId) : null
   );
   const employees = Array.isArray(data) ? data : [];
   const [showAdd, setShowAdd] = useState(false);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
-  const [formData, setFormData] = useState({ name: "", monthly_salary: "", paid_leave_days: "0" });
+  const [formData, setFormData] = useState({
+    name: "",
+    monthly_salary: "",
+    paid_leave_days: "0",
+    salary_hidden: false,
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   function openAdd() {
-    setFormData({ name: "", monthly_salary: "", paid_leave_days: "0" });
+    setFormData({ name: "", monthly_salary: "", paid_leave_days: "0", salary_hidden: false });
     setError("");
     setShowAdd(true);
   }
@@ -50,6 +62,7 @@ export default function EmployeesClient() {
       name: emp.name,
       monthly_salary: String(emp.monthly_salary),
       paid_leave_days: String(emp.paid_leave_days),
+      salary_hidden: Boolean(emp.salary_hidden),
     });
     setError("");
     setEditEmployee(emp);
@@ -71,6 +84,7 @@ export default function EmployeesClient() {
             name: formData.name,
             monthly_salary: Number(formData.monthly_salary),
             paid_leave_days: Number(formData.paid_leave_days),
+            salary_hidden: formData.salary_hidden,
           }),
         });
         if (!res.ok) { const d = await res.json(); setError(d.error); return; }
@@ -84,6 +98,7 @@ export default function EmployeesClient() {
             name: formData.name,
             monthly_salary: Number(formData.monthly_salary),
             paid_leave_days: Number(formData.paid_leave_days),
+            salary_hidden: isAdmin ? formData.salary_hidden : false,
           }),
         });
         if (!res.ok) { const d = await res.json(); setError(d.error); return; }
@@ -120,8 +135,17 @@ export default function EmployeesClient() {
         <input id="emp-leave" type="number" className="form-input" min={0} max={30} step={1}
           value={formData.paid_leave_days}
           onChange={(e) => setFormData((f) => ({ ...f, paid_leave_days: e.target.value }))} />
-        <span className="form-hint">Added on top of payable days: 30 − absent − (0.5 × half) + paid leave.</span>
       </div>
+      {isAdmin && (
+        <label className="flex items-center gap-2 text-sm font-semibold" style={{ cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={formData.salary_hidden}
+            onChange={(e) => setFormData((f) => ({ ...f, salary_hidden: e.target.checked }))}
+          />
+          Hide from dashboard overview / mask salary
+        </label>
+      )}
       <div className="modal-footer">
         <button className="btn btn-secondary" onClick={() => { setShowAdd(false); setEditEmployee(null); }}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
@@ -144,7 +168,6 @@ export default function EmployeesClient() {
         </button>
       </div>
 
-      {/* Table */}
       {isLoading && !data ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
@@ -164,7 +187,7 @@ export default function EmployeesClient() {
               <tr>
                 <th>Employee Name</th>
                 <th>Monthly Salary</th>
-                <th>Paid Leave Allowance</th>
+                <th>Paid Leave</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -182,17 +205,28 @@ export default function EmployeesClient() {
                         {emp.name.charAt(0).toUpperCase()}
                       </div>
                       <Link href={`/employees/${emp.id}`} className="text-primary" prefetch>{emp.name}</Link>
+                      {emp.salary_hidden && (
+                        <span className="badge badge-neutral" title="Hidden from dashboard overview; staff cannot see salary">
+                          Hidden from overview
+                        </span>
+                      )}
                     </div>
                   </td>
-                  <td className="font-extrabold text-base">{formatINR(Number(emp.monthly_salary))}</td>
+                  <td className="font-extrabold text-base">
+                    {!isAdmin && emp.salary_hidden ? "—" : formatINR(Number(emp.monthly_salary))}
+                  </td>
                   <td>
                     <span className="badge badge-accent">{emp.paid_leave_days} Days</span>
                   </td>
                   <td>
                     <div className="flex gap-2 flex-wrap">
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(emp)}>Edit</button>
+                      {isAdmin && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(emp)}>Edit</button>
+                      )}
                       <Link href={`/attendance?employee=${emp.id}`} className="btn btn-outline btn-sm" prefetch>Attendance</Link>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(emp)}>Delete</button>
+                      {isAdmin && (
+                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(emp)}>Delete</button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -202,7 +236,6 @@ export default function EmployeesClient() {
         </div>
       )}
 
-      {/* Add Modal */}
       <Modal open={showAdd} onClose={() => setShowAdd(false)}>
         <div className="modal-header">
           <h2>Add New Employee</h2>
@@ -213,7 +246,6 @@ export default function EmployeesClient() {
         {EmpForm}
       </Modal>
 
-      {/* Edit Modal */}
       <Modal open={!!editEmployee} onClose={() => setEditEmployee(null)}>
         <div className="modal-header">
           <h2>Edit Employee</h2>

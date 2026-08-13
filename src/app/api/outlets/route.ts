@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthProfile, logAudit } from "@/lib/audit";
+import { getAuthProfile, logAudit, isAdmin } from "@/lib/audit";
 
-// GET /api/outlets — list all outlets for the org
+// GET /api/outlets — list outlets (staff: only their assigned outlet)
 export async function GET() {
   const profile = await getAuthProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (!isAdmin(profile) && !profile.outlet_id) {
+    return NextResponse.json([], {
+      headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=120" },
+    });
+  }
+
   const outlets = await prisma.outlet.findMany({
-    where: { org_id: profile.org_id },
+    where: {
+      org_id: profile.org_id,
+      ...(!isAdmin(profile) && profile.outlet_id ? { id: profile.outlet_id } : {}),
+    },
     orderBy: { created_at: "asc" },
     include: { _count: { select: { employees: true } } },
   });
@@ -47,7 +56,7 @@ export async function POST(request: Request) {
     entity_id: outlet.id,
     field_changed: "created",
     old_value: null,
-    new_value: JSON.stringify({ name: outlet.name }),
+    new_value: `Outlet created: ${outlet.name}`,
   });
 
   return NextResponse.json(outlet, { status: 201 });

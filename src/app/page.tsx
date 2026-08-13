@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getAuthProfile, isAdmin } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function HomePage() {
@@ -8,5 +9,7 @@ export default async function HomePage() {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
-  redirect("/dashboard");
+
+  const profile = await getAuthProfile();
+  redirect(profile && isAdmin(profile) ? "/dashboard" : "/employees");
 }

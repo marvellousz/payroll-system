@@ -49,8 +49,10 @@ export async function invalidatePayrollCaches(outletId?: string, employeeId?: st
 export const swrKeys = {
   outlets: () => "/api/outlets",
   employees: (outletId: string) => `/api/outlets/${outletId}/employees`,
-  outletPayroll: (outletId: string, month: number, year: number) =>
-    `/api/outlets/${outletId}/payroll?month=${month}&year=${year}`,
+  outletPayroll: (outletId: string, month: number, year: number, forPage: "dashboard" | "payroll" = "dashboard") =>
+    `/api/outlets/${outletId}/payroll?month=${month}&year=${year}${forPage === "payroll" ? "&for=payroll" : ""}`,
+  me: () => "/api/me",
+  salaryAdjustments: () => "/api/settings/salary-adjustments",
   employeeOverview: (employeeId: string, month: number, year: number) =>
     `/api/employees/${employeeId}/overview?month=${month}&year=${year}`,
   attendance: (employeeId: string, month: number, year: number) =>

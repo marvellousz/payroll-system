@@ -10,6 +10,7 @@ import {
   ScrollText,
   Building2,
   UserCog,
+  Settings,
   LogOut,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -28,6 +29,7 @@ const navItems: NavItem[] = [
     label: "Dashboard",
     href: "/dashboard",
     icon: <LayoutDashboard size={20} strokeWidth={2.5} />,
+    adminOnly: true,
   },
   {
     label: "Employees",
@@ -48,6 +50,12 @@ const navItems: NavItem[] = [
     label: "Audit Logs",
     href: "/audit",
     icon: <ScrollText size={20} strokeWidth={2.5} />,
+  },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: <Settings size={20} strokeWidth={2.5} />,
+    adminOnly: true,
   },
   {
     label: "Outlets",
@@ -95,7 +103,7 @@ export default function Sidebar({ isOpen, onClose, role, username }: SidebarProp
 
       <nav className={`sidebar ${isOpen ? "open" : ""}`} aria-label="Main navigation">
         {/* Brand */}
-        <Link href="/dashboard" className="sidebar__logo" onClick={onClose}>
+        <Link href={role === "admin" ? "/dashboard" : "/employees"} className="sidebar__logo" onClick={onClose}>
           <div className="sidebar__logo-text">Payroll</div>
         </Link>
 

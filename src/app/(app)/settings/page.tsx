@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getAuthProfile, isAdmin } from "@/lib/audit";
-import UsersClient from "./UsersClient";
+import SettingsClient from "./SettingsClient";
 
-export const metadata: Metadata = { title: "User Management" };
+export const metadata: Metadata = { title: "Settings" };
 
-export default async function UsersPage() {
+export default async function SettingsPage() {
   const profile = await getAuthProfile();
   if (!profile) redirect("/login");
   if (!isAdmin(profile)) redirect("/employees");
-  return <UsersClient />;
+  return <SettingsClient />;
 }

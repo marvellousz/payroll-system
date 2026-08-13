@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthProfile } from "@/lib/audit";
+import { canAccessOutlet, getAuthProfile, isAdmin } from "@/lib/audit";
 
 // GET /api/outlets/:id/employees
 export async function GET(
@@ -11,13 +11,22 @@ export async function GET(
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  if (!canAccessOutlet(profile, id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const employees = await prisma.employee.findMany({
     where: { outlet_id: id, outlet: { org_id: profile.org_id } },
     orderBy: { name: "asc" },
   });
 
-  return NextResponse.json(employees, {
+  const safe = isAdmin(profile)
+    ? employees
+    : employees.map((e) =>
+        e.salary_hidden ? { ...e, monthly_salary: 0 as unknown as typeof e.monthly_salary } : e
+      );
+
+  return NextResponse.json(safe, {
     headers: { "Cache-Control": "private, max-age=20, stale-while-revalidate=60" },
   });
 }

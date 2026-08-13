@@ -25,6 +25,8 @@ function PaymentModal({ employee, month, year, onClose, onSuccess }: {
   onClose: () => void; onSuccess: () => void;
 }) {
   const [amount, setAmount] = useState("");
+  const [type, setType] = useState<"salary" | "repayment">("salary");
+  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -35,7 +37,13 @@ function PaymentModal({ employee, month, year, onClose, onSuccess }: {
     const res = await fetch(`/api/employees/${employee.id}/payments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month, year, amount: Number(amount) }),
+      body: JSON.stringify({
+        month,
+        year,
+        amount: Number(amount),
+        type,
+        paid_at: paidAt,
+      }),
     });
     setSaving(false);
     if (res.ok) { onSuccess(); onClose(); }
@@ -46,16 +54,32 @@ function PaymentModal({ employee, month, year, onClose, onSuccess }: {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Record Salary Payment</h2>
+          <h2>Record Payment</h2>
           <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close">
             <X size={18} strokeWidth={2.5} />
           </button>
         </div>
         <p className="text-secondary text-sm mb-4">
-          Recording payment for <strong>{employee.name}</strong> · {MONTHS[month-1]} {year}
+          For <strong>{employee.name}</strong> · {MONTHS[month-1]} {year}
         </p>
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           {error && <div className="alert alert-danger">{error}</div>}
+          <div className="form-group">
+            <label className="form-label">Type</label>
+            <div className="segmented" role="group">
+              <button type="button" className={`segmented__btn ${type === "salary" ? "active" : ""}`} onClick={() => setType("salary")}>
+                Salary payment
+              </button>
+              <button type="button" className={`segmented__btn ${type === "repayment" ? "active" : ""}`} onClick={() => setType("repayment")}>
+                Repayment received
+              </button>
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="payment-date">Date</label>
+            <input id="payment-date" type="date" className="form-input" value={paidAt}
+              onChange={(e) => setPaidAt(e.target.value)} required />
+          </div>
           <div className="form-group">
             <label className="form-label" htmlFor="payment-amount">Amount (₹)</label>
             <input id="payment-amount" type="number" className="form-input" min={1} step={100}
@@ -64,7 +88,7 @@ function PaymentModal({ employee, month, year, onClose, onSuccess }: {
           <div className="modal-footer" style={{ border: "none", padding: 0, margin: 0 }}>
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? <><span className="spinner"/>Recording…</> : "Record Payment"}
+              {saving ? <><span className="spinner"/>Recording…</> : type === "repayment" ? "Record Repayment" : "Record Payment"}
             </button>
           </div>
         </form>
@@ -84,7 +108,7 @@ export default function PayrollClient() {
     employees: Employee[];
     payroll: Record<string, PayrollData>;
   }>(
-    selectedOutletId ? swrKeys.outletPayroll(selectedOutletId, month, year) : null
+    selectedOutletId ? swrKeys.outletPayroll(selectedOutletId, month, year, "payroll") : null
   );
 
   const employees = data?.employees ?? [];
@@ -173,7 +197,7 @@ export default function PayrollClient() {
                   </div>
                   <div className="card-header-row__actions">
                     <button className="btn btn-secondary btn-sm" onClick={() => setPaymentFor(emp)}>
-                      + Record Payment
+                      + Record Payment / Repayment
                     </button>
                     <button className="btn btn-secondary btn-sm" onClick={() => finalizePayroll(emp)} title="Save/finalize payroll summary">
                       Save Summary
@@ -190,7 +214,7 @@ export default function PayrollClient() {
                       </div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Days Present</span><span>{p.days_present}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Half Days</span><span>{p.days_half}</span></div>
-                      <div className="payroll-line"><span className="text-secondary text-sm">Days Absent</span><span>{p.days_absent}</span></div>
+                      <div className="payroll-line"><span className="text-secondary text-sm">Days Absent (incl. unmarked)</span><span>{p.days_absent}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Paid Leave</span><span>{p.paid_leave_days} days</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Payable Days</span><span>{p.payable_days}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Base Pay</span><span className="payroll-line__amount">{formatINR(p.base_pay)}</span></div>

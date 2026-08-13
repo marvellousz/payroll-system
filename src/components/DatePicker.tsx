@@ -128,7 +128,7 @@ export default function DatePicker({ value, onChange, label, placeholder = "Sele
               <ChevronLeft size={18} strokeWidth={2.5} />
             </button>
             <div className="datepicker__title">
-              {MONTHS[viewMonth]} <span className="text-muted">{viewYear}</span>
+              {MONTHS[viewMonth]} <span className="datepicker__year">{viewYear}</span>
             </div>
             <button type="button" className="datepicker__nav" onClick={nextMonth} aria-label="Next month">
               <ChevronRight size={18} strokeWidth={2.5} />

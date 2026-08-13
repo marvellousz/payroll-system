@@ -13,7 +13,7 @@ interface DropdownProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   options: readonly DropdownOption<T>[];
-  variant?: "form" | "header";
+  variant?: "form" | "header" | "compact";
   label?: string;
   placeholder?: string;
 }

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import useSWR from "swr";
 import Dropdown from "@/components/Dropdown";
 import DatePicker from "@/components/DatePicker";
+import { formatAuditDisplay, shouldHighlightAudit } from "@/lib/audit-format";
 import { swrKeys } from "@/lib/swr-config";
 
 interface AuditLogItem {
@@ -13,6 +14,7 @@ interface AuditLogItem {
   field_changed: string | null;
   old_value: string | null;
   new_value: string | null;
+  highlighted?: boolean;
   timestamp: string;
   user: {
     username: string;
@@ -20,20 +22,8 @@ interface AuditLogItem {
   };
 }
 
-function formatAuditValue(value: string | null) {
-  if (value == null || value === "") return "—";
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  ) {
-    try {
-      return JSON.stringify(JSON.parse(trimmed), null, 2);
-    } catch {
-      return value;
-    }
-  }
-  return value;
+interface Me {
+  role: string;
 }
 
 export default function AuditClient() {
@@ -41,6 +31,10 @@ export default function AuditClient() {
   const [entityType, setEntityType] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const { data: me } = useSWR<Me>(swrKeys.me());
+  const isAdmin = me?.role === "admin";
 
   const params = useMemo(() => {
     const p = new URLSearchParams();
@@ -52,7 +46,7 @@ export default function AuditClient() {
     return p;
   }, [page, entityType, dateFrom, dateTo]);
 
-  const { data, isLoading } = useSWR<{
+  const { data, isLoading, mutate } = useSWR<{
     logs: AuditLogItem[];
     total: number;
     pages: number;
@@ -62,16 +56,43 @@ export default function AuditClient() {
   const total = data?.total ?? 0;
   const pages = data?.pages ?? 1;
 
+  async function handleDeleteOld() {
+    if (
+      !confirm(
+        "Delete all audit logs older than 1 year? This cannot be undone. A summary entry will be kept."
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/audit-logs", { method: "DELETE" });
+      const body = await res.json();
+      if (!res.ok) {
+        alert(body.error || "Failed to delete logs");
+        return;
+      }
+      alert(body.message || `Deleted ${body.deleted} logs`);
+      void mutate();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="page-content animate-fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Audit Logs</h1>
-          <p className="page-subtitle">Complete history of system mutations and changes ({total} total)</p>
+          <p className="page-subtitle">Readable history of system changes ({total} total)</p>
         </div>
+        {isAdmin && (
+          <button className="btn btn-danger" onClick={handleDeleteOld} disabled={deleting}>
+            {deleting ? <><span className="spinner" />Deleting…</> : "Delete logs older than 1 year"}
+          </button>
+        )}
       </div>
 
-      {/* Filter bar */}
       <div className="card mb-6" style={{ padding: "1rem 1.25rem" }}>
         <div className="flex gap-3 flex-wrap items-center">
           <div className="form-group" style={{ flex: "1 1 180px" }}>
@@ -84,8 +105,10 @@ export default function AuditClient() {
                 { value: "AttendanceRecord", label: "Attendance" },
                 { value: "PayrollSummary", label: "Payroll" },
                 { value: "SalaryPayment", label: "Salary Payment" },
+                { value: "SalaryAdjustment", label: "Salary Adjustment" },
                 { value: "Outlet", label: "Outlet" },
                 { value: "Profile", label: "User/Profile" },
+                { value: "AuditLog", label: "Audit meta" },
               ]}
               label="Entity Type"
             />
@@ -120,7 +143,6 @@ export default function AuditClient() {
         </div>
       </div>
 
-      {/* Logs Table */}
       {isLoading && !data ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
@@ -138,46 +160,40 @@ export default function AuditClient() {
                 <tr>
                   <th>Timestamp</th>
                   <th>User</th>
-                  <th>Entity</th>
-                  <th>Field Changed</th>
-                  <th>Old Value</th>
-                  <th>New Value</th>
+                  <th>Summary</th>
+                  <th>Details</th>
                 </tr>
               </thead>
               <tbody>
-                {logs.map((log) => (
-                  <tr key={log.id}>
-                    <td className="text-muted text-xs white-space-nowrap">
-                      {new Date(log.timestamp).toLocaleString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td>
-                      <span className="font-medium text-sm">{log.user?.username ?? "System"}</span>
-                    </td>
-                    <td>
-                      <span className="badge badge-accent">{log.entity_type}</span>
-                    </td>
-                    <td className="font-medium text-sm">
-                      {log.field_changed ?? "—"}
-                    </td>
-                    <td className="text-secondary text-xs audit-value-cell">
-                      {formatAuditValue(log.old_value)}
-                    </td>
-                    <td className="text-primary text-xs font-semibold audit-value-cell">
-                      {formatAuditValue(log.new_value)}
-                    </td>
-                  </tr>
-                ))}
+                {logs.map((log) => {
+                  const display = formatAuditDisplay(log);
+                  const highlight = shouldHighlightAudit(log);
+                  return (
+                    <tr key={log.id} className={highlight ? "audit-row--highlight" : undefined}>
+                      <td className="text-muted text-xs white-space-nowrap">
+                        {new Date(log.timestamp).toLocaleString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td>
+                        <span className="font-medium text-sm">{log.user?.username ?? "System"}</span>
+                      </td>
+                      <td>
+                        <span className="font-semibold text-sm">{display.summary}</span>
+                        <div className="text-muted text-xs mt-1">{log.entity_type}</div>
+                      </td>
+                      <td className="text-sm">{display.detail}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
           {pages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-secondary">

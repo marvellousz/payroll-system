@@ -11,6 +11,7 @@ export interface AuditLogParams {
   field_changed?: string;
   old_value?: string | null;
   new_value?: string | null;
+  highlighted?: boolean;
 }
 
 export async function logAudit(params: AuditLogParams) {
@@ -30,10 +31,10 @@ export async function logAudit(params: AuditLogParams) {
           params.new_value !== undefined
             ? String(params.new_value ?? "")
             : null,
+        highlighted: params.highlighted ?? false,
       },
     });
   } catch (error) {
-    // Audit failures should never block the main operation
     console.error("[AuditLog] Failed to write audit entry:", error);
   }
 }
@@ -44,6 +45,7 @@ const PROFILE_SELECT = {
   email: true,
   username: true,
   role: true,
+  outlet_id: true,
 } as const;
 
 const getCachedProfile = unstable_cache(
@@ -52,7 +54,7 @@ const getCachedProfile = unstable_cache(
       where: { id: userId },
       select: PROFILE_SELECT,
     }),
-  ["auth-profile"],
+  ["auth-profile-v2"],
   { revalidate: 60 }
 );
 
@@ -68,3 +70,16 @@ export const getAuthProfile = cache(async () => {
   if (!userId || typeof userId !== "string") return null;
   return getCachedProfile(userId);
 });
+
+export function isAdmin(profile: { role: string } | null | undefined) {
+  return profile?.role === "admin";
+}
+
+/** Staff may only access their assigned outlet; admins may access any org outlet. */
+export function canAccessOutlet(
+  profile: { role: string; outlet_id: string | null },
+  outletId: string
+) {
+  if (profile.role === "admin") return true;
+  return profile.outlet_id === outletId;
+}

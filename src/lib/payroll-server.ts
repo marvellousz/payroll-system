@@ -8,6 +8,7 @@ export type PayrollBreakdown = {
   days_present: number;
   days_absent: number;
   days_half: number;
+  days_unmarked: number;
   paid_leave_days: number;
   payable_days: number;
   base_pay: number;
@@ -26,6 +27,7 @@ type EmployeeWithOutlet = {
   id: string;
   monthly_salary: { toString(): string };
   paid_leave_days: number;
+  salary_hidden?: boolean;
   outlet: { overtime_rate: { toString(): string } };
 };
 
@@ -36,8 +38,9 @@ type AttendanceRow = {
 };
 
 type PaymentRow = {
-  employee_id: string;
+  employee_id?: string;
   amount: unknown;
+  type?: string | null;
 };
 
 type SummaryRow = {
@@ -63,6 +66,19 @@ function monthRange(year: number, month: number) {
   };
 }
 
+/** Net salary given = salary payments − repayments */
+export function netSalaryGiven(payments: PaymentRow[]) {
+  return payments.reduce((sum, p) => {
+    const amount = Number(p.amount);
+    if (p.type === "repayment") return sum - amount;
+    return sum + amount;
+  }, 0);
+}
+
+/**
+ * Unmarked days (no attendance row) count as absent for the fixed 30-day month.
+ * Present / half / absent only from marked records; unmarked fills the rest of 30.
+ */
 export function buildPayrollBreakdown(
   employee: EmployeeWithOutlet,
   month: number,
@@ -73,13 +89,18 @@ export function buildPayrollBreakdown(
   existingSummary: SummaryRow | undefined
 ): PayrollBreakdown {
   const days_present = attendance.filter((r) => r.status === "present").length;
-  const days_absent = attendance.filter((r) => r.status === "absent").length;
   const days_half = attendance.filter((r) => r.status === "half").length;
+  const markedAbsent = attendance.filter((r) => r.status === "absent").length;
+  const markedDays = days_present + days_half + markedAbsent;
+  const days_unmarked = Math.max(0, 30 - markedDays);
+  // Unmarked count as absent for the formula
+  const days_absent = markedAbsent + days_unmarked;
+
   const overtime_total_units = attendance.reduce(
     (sum, r) => sum + (r.overtime_units ? Number(r.overtime_units) : 0),
     0
   );
-  const salary_given = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const salary_given = netSalaryGiven(payments);
   const previous_balance = prevSummary ? Number(prevSummary.closing_balance) : 0;
 
   const { base_pay, overtime_pay, total_pay, payable_days } = calculatePayroll({
@@ -104,6 +125,7 @@ export function buildPayrollBreakdown(
     days_present,
     days_absent,
     days_half,
+    days_unmarked,
     paid_leave_days: employee.paid_leave_days,
     payable_days,
     base_pay,
@@ -119,9 +141,16 @@ export function buildPayrollBreakdown(
   };
 }
 
-export async function computeOutletPayroll(outletId: string, orgId: string, month: number, year: number) {
+export async function computeOutletPayroll(
+  outletId: string,
+  orgId: string,
+  month: number,
+  year: number,
+  options?: { includeHidden?: boolean }
+) {
   const { startDate, endDate } = monthRange(year, month);
   const { prevMonth, prevYear } = prevMonthYear(month, year);
+  const includeHidden = options?.includeHidden ?? true;
 
   const [outlet, employees] = await Promise.all([
     prisma.outlet.findFirst({
@@ -129,12 +158,17 @@ export async function computeOutletPayroll(outletId: string, orgId: string, mont
       select: { id: true, overtime_rate: true },
     }),
     prisma.employee.findMany({
-      where: { outlet_id: outletId, outlet: { org_id: orgId } },
+      where: {
+        outlet_id: outletId,
+        outlet: { org_id: orgId },
+        ...(includeHidden ? {} : { salary_hidden: false }),
+      },
       select: {
         id: true,
         name: true,
         monthly_salary: true,
         paid_leave_days: true,
+        salary_hidden: true,
       },
       orderBy: { name: "asc" },
     }),
@@ -155,7 +189,7 @@ export async function computeOutletPayroll(outletId: string, orgId: string, mont
     }),
     prisma.salaryPayment.findMany({
       where: { employee_id: { in: employeeIds }, month, year },
-      select: { employee_id: true, amount: true },
+      select: { employee_id: true, amount: true, type: true },
     }),
     prisma.payrollSummary.findMany({
       where: { employee_id: { in: employeeIds }, month, year },
@@ -213,14 +247,20 @@ export async function computeEmployeePayroll(
     }),
     prisma.salaryPayment.findMany({
       where: { employee_id: employeeId, month, year },
-      select: { employee_id: true, amount: true },
+      select: { employee_id: true, amount: true, type: true },
     }),
     prisma.payrollSummary.findUnique({
       where: { employee_id_month_year: { employee_id: employeeId, month, year } },
       select: { employee_id: true, closing_balance: true, generated_at: true },
     }),
     prisma.payrollSummary.findUnique({
-      where: { employee_id_month_year: { employee_id: employeeId, month: prevMonth, year: prevYear } },
+      where: {
+        employee_id_month_year: {
+          employee_id: employeeId,
+          month: prevMonth,
+          year: prevYear,
+        },
+      },
       select: { employee_id: true, closing_balance: true, generated_at: true },
     }),
   ]);

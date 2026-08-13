@@ -5,7 +5,12 @@ import { getAuthProfile, logAudit } from "@/lib/audit";
 async function verifyEmployee(employeeId: string, orgId: string) {
   return prisma.employee.findFirst({
     where: { id: employeeId, outlet: { org_id: orgId } },
+    select: { id: true, name: true, outlet_id: true },
   });
+}
+
+function formatDay(date: Date) {
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
 // GET /api/employees/:id/attendance?month=&year=
@@ -42,7 +47,7 @@ export async function GET(
   });
 }
 
-// POST /api/attendance — upsert a single attendance record
+// POST /api/employees/:id/attendance — upsert a single attendance record
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -61,15 +66,32 @@ export async function POST(
     return NextResponse.json({ error: "status must be present, absent, or half" }, { status: 400 });
   }
 
+  const allowedOt = [null, 0, 0.5, 1, 1.5, 2];
+  const otRaw = status === "absent" ? null : overtime_units ?? null;
+  const otUnits =
+    otRaw === null || otRaw === "" || otRaw === undefined
+      ? null
+      : Number(otRaw);
+  if (otUnits !== null && !allowedOt.includes(otUnits)) {
+    return NextResponse.json(
+      { error: "overtime_units must be one of: none, 0.5, 1, 1.5, 2" },
+      { status: 400 }
+    );
+  }
+
   const employee = await verifyEmployee(id, profile.org_id);
   if (!employee) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  if (
+    profile.role !== "admin" &&
+    profile.outlet_id &&
+    employee.outlet_id !== profile.outlet_id
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const dateObj = new Date(date);
 
-  // If absent, overtime must be null
-  const otUnits = status === "absent" ? null : (overtime_units ?? null);
-
-  // Get existing record for audit diff
   const existing = await prisma.attendanceRecord.findUnique({
     where: { employee_id_date: { employee_id: id, date: dateObj } },
   });
@@ -88,7 +110,7 @@ export async function POST(
     },
   });
 
-  // Audit in the background so the click feels instant
+  const dateLabel = formatDay(dateObj);
   if (!existing || existing.status !== status) {
     void logAudit({
       org_id: profile.org_id,
@@ -97,7 +119,7 @@ export async function POST(
       entity_id: record.id,
       field_changed: "status",
       old_value: existing?.status ?? null,
-      new_value: status,
+      new_value: `${employee.name} · ${dateLabel} · ${existing?.status ?? "unmarked"} → ${status}`,
     });
   }
 
@@ -111,7 +133,7 @@ export async function POST(
       entity_id: record.id,
       field_changed: "overtime_units",
       old_value: oldOt,
-      new_value: newOt,
+      new_value: `${employee.name} · ${dateLabel} · OT ${oldOt ?? "None"} → ${newOt ?? "None"}`,
     });
   }
 

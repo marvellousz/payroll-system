@@ -25,9 +25,12 @@ export function prefetchOutletData(outletId: string, month?: number, year?: numb
   const next = shiftMonth(m, y, 1);
 
   void preload(swrKeys.employees(outletId), fetcher);
-  void preload(swrKeys.outletPayroll(outletId, m, y), fetcher);
-  void preload(swrKeys.outletPayroll(outletId, prev.month, prev.year), fetcher);
-  void preload(swrKeys.outletPayroll(outletId, next.month, next.year), fetcher);
+  void preload(swrKeys.outletPayroll(outletId, m, y, "dashboard"), fetcher);
+  void preload(swrKeys.outletPayroll(outletId, m, y, "payroll"), fetcher);
+  void preload(swrKeys.outletPayroll(outletId, prev.month, prev.year, "dashboard"), fetcher);
+  void preload(swrKeys.outletPayroll(outletId, next.month, next.year, "dashboard"), fetcher);
+  void preload(swrKeys.outletPayroll(outletId, prev.month, prev.year, "payroll"), fetcher);
+  void preload(swrKeys.outletPayroll(outletId, next.month, next.year, "payroll"), fetcher);
 }
 
 export function prefetchRouteData(href: string, outletId: string) {

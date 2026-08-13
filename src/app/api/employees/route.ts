@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthProfile, logAudit } from "@/lib/audit";
+import { canAccessOutlet, getAuthProfile, logAudit } from "@/lib/audit";
 
 // POST /api/employees — create employee
 export async function POST(request: Request) {
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { outlet_id, name, monthly_salary, paid_leave_days } = body;
+  const { outlet_id, name, monthly_salary, paid_leave_days, salary_hidden } = body;
 
   if (!outlet_id || !name || monthly_salary === undefined) {
     return NextResponse.json(
@@ -17,7 +17,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // Verify outlet belongs to org
+  if (!canAccessOutlet(profile, outlet_id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const outlet = await prisma.outlet.findFirst({
     where: { id: outlet_id, org_id: profile.org_id },
   });
@@ -29,6 +32,7 @@ export async function POST(request: Request) {
       name: name.trim(),
       monthly_salary,
       paid_leave_days: paid_leave_days ?? 0,
+      salary_hidden: profile.role === "admin" ? Boolean(salary_hidden) : false,
     },
   });
 
@@ -39,11 +43,7 @@ export async function POST(request: Request) {
     entity_id: employee.id,
     field_changed: "created",
     old_value: null,
-    new_value: JSON.stringify({
-      name: employee.name,
-      monthly_salary: String(employee.monthly_salary),
-      paid_leave_days: employee.paid_leave_days,
-    }),
+    new_value: `Employee added: ${employee.name}`,
   });
 
   return NextResponse.json(employee, { status: 201 });

@@ -22,6 +22,7 @@ interface Payment {
   month: number;
   year: number;
   amount: string;
+  type?: "salary" | "repayment";
   paid_at: string;
   created_by_profile?: { username: string };
 }
@@ -30,6 +31,7 @@ interface PayrollData {
   days_present: number;
   days_absent: number;
   days_half: number;
+  days_unmarked?: number;
   paid_leave_days: number;
   payable_days: number;
   base_pay: number;
@@ -162,7 +164,7 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
       <div className="flex justify-between items-start mb-4 flex-wrap gap-3">
         <h2 className="text-lg font-bold">Monthly Overview</h2>
         <div className="flex items-center gap-3 flex-wrap" style={{ width: "100%", maxWidth: "100%" }}>
-          <div className="segmented" role="group" aria-label="View mode" style={{ flex: "1 1 auto" }}>
+          <div className="segmented" role="group" aria-label="View mode">
             <button type="button" className={`segmented__btn ${view === "summary" ? "active" : ""}`} onClick={() => setView("summary")} aria-pressed={view === "summary"}>Summary</button>
             <button type="button" className={`segmented__btn ${view === "full" ? "active" : ""}`} onClick={() => setView("full")} aria-pressed={view === "full"}>Full Month View</button>
           </div>
@@ -183,7 +185,7 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                 <span className="badge badge-success">{fullPresent} Present</span>
                 <span className="badge badge-warning">{fullHalf} Half</span>
                 <span className="badge badge-danger">{fullAbsent} Absent</span>
-                <span className="badge badge-neutral">{daysInMonth - fullPresent - fullHalf - fullAbsent} Unmarked</span>
+                <span className="badge badge-neutral">{daysInMonth - fullPresent - fullHalf - fullAbsent} Unmarked and absent</span>
               </div>
             </div>
             <div className="table-container">
@@ -205,7 +207,7 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                               {rec.status === "present" ? "Present" : rec.status === "half" ? "Half Day" : "Absent"}
                             </span>
                           ) : (
-                            <span className="badge badge-neutral">Unmarked</span>
+                            <span className="badge badge-neutral">Unmarked and absent</span>
                           )}
                         </td>
                         <td className={rec?.overtime_units != null ? "amount-positive font-semibold" : "text-muted"}>
@@ -226,7 +228,8 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                 <div>
                   <div className="payroll-line"><span className="text-secondary">Days Present</span><span className="font-bold">{payroll.days_present}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Half Days</span><span className="font-bold">{payroll.days_half}</span></div>
-                  <div className="payroll-line"><span className="text-secondary">Days Absent</span><span className="font-bold">{payroll.days_absent}</span></div>
+                  <div className="payroll-line"><span className="text-secondary">Days Absent (incl. unmarked)</span><span className="font-bold">{payroll.days_absent}</span></div>
+                  <div className="payroll-line"><span className="text-secondary">Unmarked and absent</span><span className="font-bold">{payroll.days_unmarked ?? "—"}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Paid Leave</span><span className="font-bold">{payroll.paid_leave_days}d</span></div>
                   <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-bold">{payroll.payable_days}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{formatINR(payroll.base_pay)}</span></div>
@@ -257,7 +260,8 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                 <div className="text-muted text-xs font-semibold uppercase mb-3">Calculation Breakdown</div>
                 <div className="payroll-line"><span className="text-secondary">Days Present</span><span className="font-semibold">{payroll.days_present}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Half Days</span><span className="font-semibold">{payroll.days_half}</span></div>
-                <div className="payroll-line"><span className="text-secondary">Days Absent</span><span className="font-semibold">{payroll.days_absent}</span></div>
+                <div className="payroll-line"><span className="text-secondary">Days Absent (incl. unmarked)</span><span className="font-semibold">{payroll.days_absent}</span></div>
+                <div className="payroll-line"><span className="text-secondary">Unmarked and absent</span><span className="font-semibold">{payroll.days_unmarked ?? "—"}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Paid Leave Days</span><span className="font-semibold">{payroll.paid_leave_days}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-semibold">{payroll.payable_days}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{formatINR(payroll.base_pay)}</span></div>
@@ -286,14 +290,21 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
         <div className="table-container">
           <table className="table">
             <thead>
-              <tr><th>Date</th><th>For Month</th><th>Amount</th><th>Recorded By</th></tr>
+              <tr><th>Date</th><th>Type</th><th>For Month</th><th>Amount</th><th>Recorded By</th></tr>
             </thead>
             <tbody>
               {payments.map((p) => (
                 <tr key={p.id}>
                   <td className="text-secondary text-sm">{new Date(p.paid_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td>
+                  <td>
+                    <span className={`badge ${p.type === "repayment" ? "badge-warning" : "badge-accent"}`}>
+                      {p.type === "repayment" ? "Repayment" : "Salary"}
+                    </span>
+                  </td>
                   <td>{MONTHS[p.month - 1]} {p.year}</td>
-                  <td className="font-semibold amount-positive">{formatINR(Number(p.amount))}</td>
+                  <td className={`font-semibold ${p.type === "repayment" ? "amount-negative" : "amount-positive"}`}>
+                    {p.type === "repayment" ? "−" : ""}{formatINR(Number(p.amount))}
+                  </td>
                   <td className="text-muted text-sm">{p.created_by_profile?.username ?? "Admin"}</td>
                 </tr>
               ))}

@@ -23,7 +23,6 @@ export async function DELETE(
   });
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  // Delete from Supabase auth first
   const supabaseAdmin = await createAdminClient();
   const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id);
   if (authError) {
@@ -39,7 +38,8 @@ export async function DELETE(
     entity_id: id,
     field_changed: "deleted",
     old_value: target.username,
-    new_value: null,
+    new_value: `${target.username} (${target.role})`,
+    highlighted: true,
   });
 
   return NextResponse.json({ success: true });

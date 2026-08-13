@@ -11,7 +11,14 @@ interface UserProfile {
   email: string;
   username: string;
   role: "admin" | "staff";
+  outlet_id: string | null;
+  outlet?: { id: string; name: string } | null;
   created_at: string;
+}
+
+interface OutletOption {
+  id: string;
+  name: string;
 }
 
 function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -27,19 +34,28 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 
 export default function UsersClient() {
   const { data, isLoading, mutate } = useSWR<UserProfile[]>(swrKeys.users());
+  const { data: outletsData } = useSWR<OutletOption[]>(swrKeys.outlets());
   const users = Array.isArray(data) ? data : [];
+  const outlets = Array.isArray(outletsData) ? outletsData : [];
   const [showAdd, setShowAdd] = useState(false);
   const [formData, setFormData] = useState({
     username: "",
     email: "",
     password: "",
     role: "staff" as "admin" | "staff",
+    outlet_id: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   function openAdd() {
-    setFormData({ username: "", email: "", password: "", role: "staff" });
+    setFormData({
+      username: "",
+      email: "",
+      password: "",
+      role: "staff",
+      outlet_id: outlets[0]?.id ?? "",
+    });
     setError("");
     setShowAdd(true);
   }
@@ -55,6 +71,10 @@ export default function UsersClient() {
       setError("Password must be at least 8 characters.");
       return;
     }
+    if (formData.role === "staff" && !formData.outlet_id) {
+      setError("Staff users must be assigned to an outlet.");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/users", {
@@ -65,6 +85,7 @@ export default function UsersClient() {
           email: formData.email.trim().toLowerCase(),
           password: formData.password,
           role: formData.role,
+          outlet_id: formData.role === "staff" ? formData.outlet_id : null,
         }),
       });
       const data = await res.json();
@@ -119,6 +140,7 @@ export default function UsersClient() {
                 <th>Username</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Outlet</th>
                 <th>Created At</th>
                 <th>Actions</th>
               </tr>
@@ -145,6 +167,9 @@ export default function UsersClient() {
                       {u.role}
                     </span>
                   </td>
+                  <td className="text-secondary text-sm">
+                    {u.role === "admin" ? "All outlets" : (u.outlet?.name ?? "—")}
+                  </td>
                   <td className="text-muted text-xs">
                     {new Date(u.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                   </td>
@@ -160,12 +185,11 @@ export default function UsersClient() {
         </div>
       )}
 
-      {/* Add User Modal */}
       <Modal open={showAdd} onClose={() => setShowAdd(false)}>
         <div className="modal-header">
           <h2>Add New User</h2>
           <button className="btn btn-ghost btn-icon" onClick={() => setShowAdd(false)} aria-label="Close">
-<X size={18} strokeWidth={2} />
+            <X size={18} strokeWidth={2} />
           </button>
         </div>
 
@@ -214,17 +238,28 @@ export default function UsersClient() {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="user-role">Role</label>
             <Dropdown
-            value={formData.role}
-            onChange={(v) => setFormData((f) => ({ ...f, role: v }))}
-            options={[
-              { value: "staff", label: "Staff (Standard access)" },
-              { value: "admin", label: "Admin (Full system access)" },
-            ]}
-            label="Role"
-          />
+              value={formData.role}
+              onChange={(v) => setFormData((f) => ({ ...f, role: v as "admin" | "staff" }))}
+              options={[
+                { value: "staff", label: "Staff (Standard access)" },
+                { value: "admin", label: "Admin (Full system access)" },
+              ]}
+              label="Role"
+            />
           </div>
+
+          {formData.role === "staff" && (
+            <div className="form-group">
+              <Dropdown
+                value={formData.outlet_id}
+                onChange={(v) => setFormData((f) => ({ ...f, outlet_id: v }))}
+                options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+                label="Assigned Outlet"
+                placeholder="Select outlet"
+              />
+            </div>
+          )}
 
           <div className="modal-footer" style={{ border: "none", padding: 0, margin: 0, marginTop: "0.5rem" }}>
             <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>

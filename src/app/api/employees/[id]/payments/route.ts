@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthProfile, logAudit } from "@/lib/audit";
+import { netSalaryGiven } from "@/lib/payroll-server";
 
 async function verifyEmployee(employeeId: string, orgId: string) {
   return prisma.employee.findFirst({
     where: { id: employeeId, outlet: { org_id: orgId } },
   });
+}
+
+function formatPaidAt(d: Date) {
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
 // GET /api/employees/:id/payments?month=&year=
@@ -37,7 +42,7 @@ export async function GET(
   return NextResponse.json(payments);
 }
 
-// POST /api/employees/:id/payments — record a salary payment
+// POST /api/employees/:id/payments — record salary payment or repayment
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -47,7 +52,8 @@ export async function POST(
 
   const { id } = await params;
   const body = await request.json();
-  const { month, year, amount, paid_at } = body;
+  const { month, year, amount, paid_at, type } = body;
+  const paymentType = type === "repayment" ? "repayment" : "salary";
 
   if (!month || !year || amount === undefined) {
     return NextResponse.json({ error: "month, year, and amount are required" }, { status: 400 });
@@ -59,35 +65,44 @@ export async function POST(
   const employee = await verifyEmployee(id, profile.org_id);
   if (!employee) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const paidAt = paid_at ? new Date(paid_at) : new Date();
+
   const payment = await prisma.salaryPayment.create({
     data: {
       employee_id: id,
       month: Number(month),
       year: Number(year),
       amount: Number(amount),
-      paid_at: paid_at ? new Date(paid_at) : new Date(),
+      type: paymentType,
+      paid_at: paidAt,
       created_by: profile.id,
     },
   });
 
-  // Update salary_given in payroll summary if it exists
+  // Recompute net salary_given for the month summary if it exists
+  const monthPayments = await prisma.salaryPayment.findMany({
+    where: { employee_id: id, month: Number(month), year: Number(year) },
+    select: { amount: true, type: true },
+  });
+  const net = netSalaryGiven(monthPayments);
   await prisma.payrollSummary.updateMany({
     where: { employee_id: id, month: Number(month), year: Number(year) },
-    data: {
-      salary_given: {
-        increment: Number(amount),
-      },
-    },
+    data: { salary_given: net },
   });
+
+  const label =
+    paymentType === "repayment"
+      ? `Repayment received ${formatPaidAt(paidAt)}: ₹${Number(amount).toLocaleString("en-IN")} (${employee.name})`
+      : `Salary paid ${formatPaidAt(paidAt)}: ₹${Number(amount).toLocaleString("en-IN")} (${employee.name})`;
 
   await logAudit({
     org_id: profile.org_id,
     user_id: profile.id,
     entity_type: "SalaryPayment",
     entity_id: payment.id,
-    field_changed: "amount",
+    field_changed: paymentType,
     old_value: null,
-    new_value: String(amount),
+    new_value: label,
   });
 
   return NextResponse.json(payment, { status: 201 });

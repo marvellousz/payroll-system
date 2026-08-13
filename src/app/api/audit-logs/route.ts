@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthProfile } from "@/lib/audit";
+import { getAuthProfile, isAdmin, logAudit } from "@/lib/audit";
 
 // GET /api/audit-logs?entity_type=&entity_id=&user_id=&date_from=&date_to=&page=&limit=
 export async function GET(request: Request) {
@@ -44,4 +44,57 @@ export async function GET(request: Request) {
     { logs, total, page, limit, pages: Math.ceil(total / limit) },
     { headers: { "Cache-Control": "private, max-age=10, stale-while-revalidate=30" } }
   );
+}
+
+function formatRangeDate(d: Date) {
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// DELETE /api/audit-logs — admin only; deletes logs older than 1 year
+export async function DELETE() {
+  const profile = await getAuthProfile();
+  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(profile)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 1);
+
+  const oldLogs = await prisma.auditLog.findMany({
+    where: {
+      org_id: profile.org_id,
+      timestamp: { lt: cutoff },
+    },
+    select: { id: true, timestamp: true },
+    orderBy: { timestamp: "asc" },
+  });
+
+  if (oldLogs.length === 0) {
+    return NextResponse.json({
+      deleted: 0,
+      message: "No logs older than 1 year to delete",
+    });
+  }
+
+  const from = oldLogs[0]!.timestamp;
+  const to = oldLogs[oldLogs.length - 1]!.timestamp;
+  const ids = oldLogs.map((l) => l.id);
+
+  await prisma.auditLog.deleteMany({
+    where: { id: { in: ids } },
+  });
+
+  const summary = `Logs deleted from ${formatRangeDate(from)} to ${formatRangeDate(to)}`;
+
+  await logAudit({
+    org_id: profile.org_id,
+    user_id: profile.id,
+    entity_type: "AuditLog",
+    entity_id: profile.org_id,
+    field_changed: "deleted_range",
+    old_value: String(ids.length),
+    new_value: summary,
+    highlighted: true,
+  });
+
+  return NextResponse.json({ deleted: ids.length, message: summary });
 }

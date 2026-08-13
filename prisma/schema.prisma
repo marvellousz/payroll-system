@@ -30,6 +30,21 @@ enum AttendanceStatus {
   half
 }
 
+enum PaymentType {
+  salary
+  repayment
+}
+
+enum AdjustmentScope {
+  employee
+  all
+}
+
+enum AdjustmentMode {
+  percent
+  amount
+}
+
 // ─── Organization ─────────────────────────────────────────────────────────────
 
 model Organization {
@@ -37,9 +52,10 @@ model Organization {
   name       String
   created_at DateTime @default(now())
 
-  outlets    Outlet[]
-  profiles   Profile[]
-  audit_logs AuditLog[]
+  outlets             Outlet[]
+  profiles            Profile[]
+  audit_logs          AuditLog[]
+  salary_adjustments  SalaryAdjustment[]
 }
 
 // ─── Profile (linked to Supabase auth.users) ──────────────────────────────────
@@ -50,14 +66,18 @@ model Profile {
   email      String   @unique
   username   String   @unique
   role       UserRole @default(staff)
+  outlet_id  String?  // staff locked to one outlet; admin usually null
   created_at DateTime @default(now())
 
-  org           Organization    @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  salary_payments SalaryPayment[]
-  audit_logs    AuditLog[]
+  org                 Organization      @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  outlet              Outlet?           @relation(fields: [outlet_id], references: [id], onDelete: SetNull)
+  salary_payments     SalaryPayment[]
+  audit_logs          AuditLog[]
+  salary_adjustments  SalaryAdjustment[]
 
   @@index([org_id])
   @@index([username])
+  @@index([outlet_id])
 }
 
 // ─── Outlet ───────────────────────────────────────────────────────────────────
@@ -72,6 +92,7 @@ model Outlet {
 
   org       Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
   employees Employee[]
+  profiles  Profile[]
 
   @@index([org_id])
 }
@@ -84,9 +105,10 @@ model Employee {
   name             String
   monthly_salary   Decimal  @db.Decimal(10, 2)
   paid_leave_days  Int      @default(0)
+  salary_hidden    Boolean  @default(false)
   created_at       DateTime @default(now())
 
-  outlet            Outlet             @relation(fields: [outlet_id], references: [id], onDelete: Cascade)
+  outlet             Outlet              @relation(fields: [outlet_id], references: [id], onDelete: Cascade)
   attendance_records AttendanceRecord[]
   payroll_summaries  PayrollSummary[]
   salary_payments    SalaryPayment[]
@@ -143,19 +165,40 @@ model PayrollSummary {
 // ─── SalaryPayment ────────────────────────────────────────────────────────────
 
 model SalaryPayment {
-  id          String   @id @default(uuid())
+  id          String      @id @default(uuid())
   employee_id String
   month       Int
   year        Int
-  amount      Decimal  @db.Decimal(10, 2)
-  paid_at     DateTime @default(now())
-  created_by  String   // Profile.id
-  created_at  DateTime @default(now())
+  amount      Decimal     @db.Decimal(10, 2)
+  type        PaymentType @default(salary)
+  paid_at     DateTime    @default(now())
+  created_by  String      // Profile.id
+  created_at  DateTime    @default(now())
 
-  employee   Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  created_by_profile Profile @relation(fields: [created_by], references: [id])
+  employee           Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  created_by_profile Profile  @relation(fields: [created_by], references: [id])
 
   @@index([employee_id, month, year])
+}
+
+// ─── SalaryAdjustment (bulk/percent change with undo) ─────────────────────────
+
+model SalaryAdjustment {
+  id          String          @id @default(uuid())
+  org_id      String
+  scope       AdjustmentScope
+  employee_id String?
+  mode        AdjustmentMode
+  value       Decimal         @db.Decimal(10, 2)
+  snapshot    String          // JSON: [{ id, monthly_salary }]
+  created_by  String
+  created_at  DateTime        @default(now())
+  undone_at   DateTime?
+
+  org     Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  creator Profile      @relation(fields: [created_by], references: [id])
+
+  @@index([org_id, created_at])
 }
 
 // ─── AuditLog ─────────────────────────────────────────────────────────────────
@@ -169,6 +212,7 @@ model AuditLog {
   field_changed String?
   old_value     String?
   new_value     String?
+  highlighted   Boolean  @default(false)
   timestamp     DateTime @default(now())
 
   org  Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)

@@ -19,7 +19,14 @@ interface AttendanceRecord {
 
 const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
-const DAY_LABELS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+const OT_OPTIONS = [
+  { value: "none", label: "None" },
+  { value: "0.5", label: "0.5" },
+  { value: "1", label: "1" },
+  { value: "1.5", label: "1.5" },
+  { value: "2", label: "2" },
+] as const;
 
 function recordsToMap(data: AttendanceRecord[] | undefined): Record<number, AttendanceRecord> {
   const map: Record<number, AttendanceRecord> = {};
@@ -60,7 +67,11 @@ export default function AttendanceClient() {
     setRecords(recordsToMap(attendanceList));
   }, [attendanceList]);
 
-  async function saveAttendance(day: number, status: "present" | "absent" | "half", overtime_units?: number | null) {
+  async function saveAttendance(
+    day: number,
+    status: "present" | "absent" | "half",
+    overtime_units?: number | null
+  ) {
     if (!selectedEmployee) return;
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     setSavingDate(dateStr);
@@ -113,7 +124,7 @@ export default function AttendanceClient() {
   async function updateOvertime(day: number, value: string) {
     const rec = records[day];
     if (!rec || rec.status === "absent") return;
-    const ot = value === "" ? null : Number(value);
+    const ot = value === "none" || value === "" ? null : Number(value);
     await saveAttendance(day, rec.status, ot);
   }
 
@@ -131,8 +142,8 @@ export default function AttendanceClient() {
   const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
 
   const presentCount = Object.values(records).filter((r) => r.status === "present").length;
-  const halfCount    = Object.values(records).filter((r) => r.status === "half").length;
-  const absentCount  = Object.values(records).filter((r) => r.status === "absent").length;
+  const halfCount = Object.values(records).filter((r) => r.status === "half").length;
+  const absentCount = Object.values(records).filter((r) => r.status === "absent").length;
 
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
@@ -143,13 +154,16 @@ export default function AttendanceClient() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Attendance Calendar</h1>
-          <p className="page-subtitle">Track daily presence, absence, and overtime hours</p>
+          <p className="page-subtitle">Track daily presence, absence, half-days, and overtime</p>
         </div>
-        <div className="month-nav">
+        <div className="month-nav month-nav--emphasis">
           <button className="btn btn-ghost btn-icon" onClick={prevMonth} aria-label="Previous month">
             <ChevronLeft size={18} strokeWidth={2.5} />
           </button>
-          <span className="month-nav__label">{MONTHS[month-1]} {year}</span>
+          <span className="month-nav__label">
+            <span className="month-nav__month">{MONTHS[month - 1]}</span>{" "}
+            <span className="month-nav__year">{year}</span>
+          </span>
           <button className="btn btn-ghost btn-icon" onClick={nextMonth} aria-label="Next month">
             <ChevronRight size={18} strokeWidth={2.5} />
           </button>
@@ -173,7 +187,7 @@ export default function AttendanceClient() {
           <div className="card-flat-emerald">
             <div className="stat-card__label text-emerald">Present</div>
             <div className="stat-card__value text-emerald">{presentCount}</div>
-            <div className="stat-card__sub font-bold">full days</div>
+            <div className="stat-card__sub font-bold">days this month</div>
           </div>
           <div className="card-flat-amber">
             <div className="stat-card__label text-amber">Half Day</div>
@@ -187,8 +201,10 @@ export default function AttendanceClient() {
           </div>
           <div className="card-flat-muted">
             <div className="stat-card__label">Unmarked</div>
-            <div className="stat-card__value">{daysInMonth - presentCount - halfCount - absentCount}</div>
-            <div className="stat-card__sub font-bold">days remaining</div>
+            <div className="stat-card__value">
+              {daysInMonth - presentCount - halfCount - absentCount}
+            </div>
+            <div className="stat-card__sub font-bold">count as absent in pay</div>
           </div>
         </div>
       )}
@@ -199,12 +215,16 @@ export default function AttendanceClient() {
             <span className="spinner spinner-lg" />
           </div>
         ) : (
-          <div className="card" style={{ padding: "1.25rem" }}>
+          <div className="attendance-board">
+            <h2 className="attendance-board__title attendance-board__title--solo">
+              {MONTHS[month - 1]} <span className="attendance-board__year">{year}</span>
+            </h2>
+
             <div className="attendance-scroll">
               <div className="attendance-scroll__inner">
-                <div className="attendance-grid" style={{ marginBottom: "0.75rem" }}>
+                <div className="attendance-weekbar">
                   {DAY_LABELS.map((d) => (
-                    <div key={d} className="text-center text-xs font-extrabold" style={{ padding: "0.25rem", color: "#111827", textTransform: "uppercase" }}>
+                    <div key={d} className="attendance-weekday">
                       {d}
                     </div>
                   ))}
@@ -212,88 +232,85 @@ export default function AttendanceClient() {
 
                 <div className="attendance-grid">
                   {Array.from({ length: startOffset }).map((_, i) => (
-                    <div key={`offset-${i}`} />
+                    <div key={`offset-${i}`} className="attendance-day attendance-day--empty" />
                   ))}
 
                   {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
                     const rec = records[day];
-                    const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+                    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                     const isSaving = savingDate === dateStr;
                     const isFuture = isCurrentMonth && day > today.getDate();
                     const isToday = isCurrentMonth && day === today.getDate();
 
-                    let dayClass = "attendance-day";
-                    if (isFuture) dayClass += " future";
-                    else if (rec?.status === "present") dayClass += " present";
-                    else if (rec?.status === "half") dayClass += " half";
-                    else if (rec?.status === "absent") dayClass += " absent";
+                    let dayClass = "attendance-day unmarked";
+                    if (isFuture) dayClass = "attendance-day future";
+                    else if (rec?.status === "present") dayClass = "attendance-day present";
+                    else if (rec?.status === "half") dayClass = "attendance-day half";
+                    else if (rec?.status === "absent") dayClass = "attendance-day absent";
                     if (isToday) dayClass += " today";
 
                     return (
-                      <div key={day} className={dayClass} style={{ position: "relative" }}>
+                      <div key={day} className={dayClass}>
                         {isSaving && (
-                          <div style={{ position: "absolute", top: "6px", right: "6px" }}>
+                          <div className="attendance-day__saving">
                             <span className="spinner" style={{ width: "12px", height: "12px" }} />
                           </div>
                         )}
 
-                        <div className="attendance-day__date">{day}</div>
+                        <span className="attendance-day__date">{day}</span>
 
-                        <div className="toggle-group" style={{ marginTop: "auto" }}>
+                        <div className="toggle-group attendance-day__toggles">
                           <button
+                            type="button"
                             className={`toggle-btn ${rec?.status === "present" ? "active-present" : ""}`}
                             onClick={() => {
                               if (!isFuture) saveAttendance(day, "present", rec?.overtime_units ?? null);
                             }}
                             disabled={isFuture || isSaving}
                             title="Mark Present"
-                          >P</button>
+                          >
+                            P
+                          </button>
                           <button
+                            type="button"
                             className={`toggle-btn ${rec?.status === "half" ? "active-half" : ""}`}
                             onClick={() => {
                               if (!isFuture) saveAttendance(day, "half", rec?.overtime_units ?? null);
                             }}
                             disabled={isFuture || isSaving}
                             title="Mark Half Day"
-                          >H</button>
+                          >
+                            H
+                          </button>
                           <button
+                            type="button"
                             className={`toggle-btn ${rec?.status === "absent" ? "active-absent" : ""}`}
                             onClick={() => {
                               if (!isFuture) saveAttendance(day, "absent", null);
                             }}
                             disabled={isFuture || isSaving}
                             title="Mark Absent"
-                          >A</button>
+                          >
+                            A
+                          </button>
                         </div>
 
                         {(rec?.status === "present" || rec?.status === "half") && (
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.5}
-                            placeholder="OT"
-                            value={rec.overtime_units ?? ""}
-                            onChange={(e) => {
-                              setRecords((prev) => ({
-                                ...prev,
-                                [day]: { ...rec, overtime_units: e.target.value === "" ? null : Number(e.target.value) },
-                              }));
-                            }}
-                            onBlur={(e) => updateOvertime(day, e.target.value)}
-                            style={{
-                              marginTop: "0.375rem",
-                              width: "100%",
-                              background: "#FFFFFF",
-                              border: "2px solid #111827",
-                              borderRadius: "4px",
-                              padding: "2px 4px",
-                              color: "#111827",
-                              fontSize: "0.75rem",
-                              fontWeight: "800",
-                              textAlign: "center",
-                              minHeight: "36px",
-                            }}
-                          />
+                          <div className="attendance-ot-dropdown">
+                            <Dropdown
+                              variant="form"
+                              value={
+                                rec.overtime_units != null
+                                  ? String(rec.overtime_units)
+                                  : "none"
+                              }
+                              onChange={(v) => {
+                                if (!isSaving) void updateOvertime(day, v);
+                              }}
+                              options={OT_OPTIONS}
+                              placeholder="OT"
+                            />
+                          </div>
                         )}
                       </div>
                     );
@@ -302,20 +319,24 @@ export default function AttendanceClient() {
               </div>
             </div>
 
-            <div className="flex gap-4 mt-6 pt-4 border-t justify-end flex-wrap">
+            <div className="attendance-board__legend">
               <span className="flex items-center gap-2 text-xs font-bold">
-                <span style={{ width: "12px", height: "12px", borderRadius: "3px", background: "var(--color-secondary)", display: "inline-block", flexShrink: 0 }}/>
+                <span className="attendance-swatch attendance-swatch--unmarked" />
+                Unmarked
+              </span>
+              <span className="flex items-center gap-2 text-xs font-bold">
+                <span className="attendance-swatch attendance-swatch--present" />
                 Present (P)
               </span>
               <span className="flex items-center gap-2 text-xs font-bold">
-                <span style={{ width: "12px", height: "12px", borderRadius: "3px", background: "var(--color-accent)", display: "inline-block", flexShrink: 0 }}/>
-                Half Day (H)
+                <span className="attendance-swatch attendance-swatch--half" />
+                Half (H)
               </span>
               <span className="flex items-center gap-2 text-xs font-bold">
-                <span style={{ width: "12px", height: "12px", borderRadius: "3px", background: "var(--color-danger)", display: "inline-block", flexShrink: 0 }}/>
+                <span className="attendance-swatch attendance-swatch--absent" />
                 Absent (A)
               </span>
-              <span className="text-xs text-secondary font-medium">OT = Overtime Units</span>
+              <span className="text-xs font-medium" style={{ color: "#6B5344" }}>OT = selectable units</span>
             </div>
           </div>
         )
