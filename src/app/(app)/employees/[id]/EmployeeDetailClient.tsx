@@ -14,6 +14,8 @@ interface Employee {
   monthly_salary: string;
   overtime_rate?: string;
   paid_leave_days: number;
+  salary_hidden?: boolean;
+  salary_masked?: boolean;
   outlet: { name: string; overtime_rate: string; overtime_unit: string };
   created_at: string;
 }
@@ -37,11 +39,14 @@ interface PayrollData {
   payable_days: number;
   base_pay: number;
   overtime_pay: number;
+  overtime_total_units?: number;
+  overtime_rate_snapshot?: number;
   total_pay: number;
   salary_given: number;
   previous_balance: number;
   monthly_balance: number;
   closing_balance: number;
+  salary_masked?: boolean;
 }
 
 interface AttendanceItem {
@@ -64,7 +69,12 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
     employee: Employee;
     payroll: PayrollData;
     payments: Payment[];
+    salary_masked?: boolean;
+    money_hidden?: boolean;
   }>(swrKeys.employeeOverview(employeeId, month, year));
+
+  const { data: me } = useSWR<{ role: string }>(swrKeys.me());
+  const isAdmin = me?.role === "admin";
 
   const { data: attendanceData } = useSWR<AttendanceItem[]>(
     view === "full" ? swrKeys.attendance(employeeId, month, year) : null
@@ -114,6 +124,13 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
   const fullPresent = attendance.filter((r) => r.status === "present").length;
   const fullHalf = attendance.filter((r) => r.status === "half").length;
   const fullAbsent = attendance.filter((r) => r.status === "absent").length;
+  const masked = Boolean(
+    data?.money_hidden ||
+      data?.salary_masked ||
+      employee.salary_masked ||
+      payroll?.salary_masked ||
+      (!isAdmin && me != null)
+  );
 
   return (
     <div className="page-content animate-fade-in">
@@ -144,21 +161,27 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
           </div>
         </div>
 
-        <div className="grid-3 mt-6 pt-4 border-t">
-          <div>
-            <div className="text-muted text-xs uppercase font-semibold">Monthly Salary</div>
-            <div className="text-xl font-bold mt-1">{formatINR(Number(employee.monthly_salary))}</div>
-          </div>
+        <div className={`mt-6 pt-4 border-t ${masked ? "grid-2" : "grid-3"}`}>
+          {!masked && (
+            <div>
+              <div className="text-muted text-xs uppercase font-semibold">Monthly Salary</div>
+              <div className="text-xl font-bold mt-1">
+                {formatINR(Number(employee.monthly_salary))}
+              </div>
+            </div>
+          )}
           <div>
             <div className="text-muted text-xs uppercase font-semibold">Paid Leave Allowance</div>
             <div className="text-xl font-bold mt-1">{employee.paid_leave_days} days</div>
           </div>
-          <div>
-            <div className="text-muted text-xs uppercase font-semibold">OT Rate / Day</div>
-            <div className="text-xl font-bold mt-1">
-              {formatINR(Number(employee.overtime_rate ?? employee.outlet.overtime_rate))}
+          {!masked && (
+            <div>
+              <div className="text-muted text-xs uppercase font-semibold">OT Rate / Day</div>
+              <div className="text-xl font-bold mt-1">
+                {formatINR(Number(employee.overtime_rate ?? employee.outlet.overtime_rate))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -223,9 +246,11 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
           </div>
 
           <div className="card-flat-emerald">
-            <div className="text-xs font-extrabold uppercase tracking-wide text-emerald mb-3">Final Settlement · {MONTHS[month - 1]} {year}</div>
+            <div className="text-xs font-extrabold uppercase tracking-wide text-emerald mb-3">
+              {masked ? "Month summary" : "Final Settlement"} · {MONTHS[month - 1]} {year}
+            </div>
             {payroll ? (
-              <div className="grid-2">
+              <div className={masked ? "" : "grid-2"}>
                 <div>
                   <div className="payroll-line"><span className="text-secondary">Days Present</span><span className="font-bold">{payroll.days_present}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Half Days</span><span className="font-bold">{payroll.days_half}</span></div>
@@ -233,10 +258,23 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                   <div className="payroll-line"><span className="text-secondary">Unmarked and absent</span><span className="font-bold">{payroll.days_unmarked ?? "—"}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Paid Leave</span><span className="font-bold">{payroll.paid_leave_days}d</span></div>
                   <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-bold">{payroll.payable_days}</span></div>
-                  <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{formatINR(payroll.base_pay)}</span></div>
-                  <div className="payroll-line"><span className="text-secondary">Overtime Pay</span><span className="payroll-line__amount">{formatINR(payroll.overtime_pay)}</span></div>
-                  <div className="payroll-line total divider"><span>Total Pay</span><span className="payroll-line__amount amount-positive">{formatINR(payroll.total_pay)}</span></div>
+                  {!masked && (
+                    <>
+                      <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{formatINR(payroll.base_pay)}</span></div>
+                      <div className="payroll-line">
+                        <span className="text-secondary">
+                          Overtime Pay
+                          {payroll.overtime_total_units != null && payroll.overtime_rate_snapshot != null && (
+                            <span className="text-muted"> ({payroll.overtime_total_units}×{Number(payroll.overtime_rate_snapshot)})</span>
+                          )}
+                        </span>
+                        <span className="payroll-line__amount">{formatINR(payroll.overtime_pay)}</span>
+                      </div>
+                      <div className="payroll-line total divider"><span>Total Pay</span><span className="payroll-line__amount amount-positive">{formatINR(payroll.total_pay)}</span></div>
+                    </>
+                  )}
                 </div>
+                {!masked && (
                 <div>
                   <div className="payroll-line"><span className="text-secondary">Salary Given</span><span className="payroll-line__amount">{formatINR(payroll.salary_given)}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Previous Balance</span><span className={`payroll-line__amount ${payroll.previous_balance < 0 ? "amount-negative" : ""}`}>{formatINR(payroll.previous_balance)}</span></div>
@@ -247,28 +285,43 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                     {payroll.closing_balance === 0 && <span className="badge badge-success">Fully settled</span>}
                   </div>
                 </div>
+                )}
               </div>
             ) : (
               <div className="text-secondary text-sm">No attendance data for this month. Mark attendance first.</div>
             )}
           </div>
         </div>
-      ) : (
-        payroll && (
+      ) : payroll ? (
           <div className="card mb-6">
-            <div className="grid-2" style={{ gap: "2rem" }}>
+            <div className={masked ? "" : "grid-2"} style={masked ? undefined : { gap: "2rem" }}>
               <div>
-                <div className="text-muted text-xs font-semibold uppercase mb-3">Calculation Breakdown</div>
+                <div className="text-muted text-xs font-semibold uppercase mb-3">
+                  {masked ? "Attendance summary" : "Calculation Breakdown"}
+                </div>
                 <div className="payroll-line"><span className="text-secondary">Days Present</span><span className="font-semibold">{payroll.days_present}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Half Days</span><span className="font-semibold">{payroll.days_half}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Days Absent (incl. unmarked)</span><span className="font-semibold">{payroll.days_absent}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Unmarked and absent</span><span className="font-semibold">{payroll.days_unmarked ?? "—"}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Paid Leave Days</span><span className="font-semibold">{payroll.paid_leave_days}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-semibold">{payroll.payable_days}</span></div>
-                <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{formatINR(payroll.base_pay)}</span></div>
-                <div className="payroll-line"><span className="text-secondary">Overtime Pay</span><span className="payroll-line__amount">{formatINR(payroll.overtime_pay)}</span></div>
-                <div className="payroll-line total divider"><span>Total Pay</span><span className="payroll-line__amount amount-positive">{formatINR(payroll.total_pay)}</span></div>
+                {!masked && (
+                  <>
+                    <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{formatINR(payroll.base_pay)}</span></div>
+                    <div className="payroll-line">
+                      <span className="text-secondary">
+                        Overtime Pay
+                        {payroll.overtime_total_units != null && payroll.overtime_rate_snapshot != null && (
+                          <span className="text-muted"> ({payroll.overtime_total_units}×{Number(payroll.overtime_rate_snapshot)})</span>
+                        )}
+                      </span>
+                      <span className="payroll-line__amount">{formatINR(payroll.overtime_pay)}</span>
+                    </div>
+                    <div className="payroll-line total divider"><span>Total Pay</span><span className="payroll-line__amount amount-positive">{formatINR(payroll.total_pay)}</span></div>
+                  </>
+                )}
               </div>
+              {!masked && (
               <div>
                 <div className="text-muted text-xs font-semibold uppercase mb-3">Balance & Payments</div>
                 <div className="payroll-line"><span className="text-secondary">Previous Balance</span><span className="payroll-line__amount">{formatINR(payroll.previous_balance)}</span></div>
@@ -279,10 +332,15 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                   <Link href={`/attendance?employee=${employee.id}`} className="btn btn-framed btn-sm">View / Edit Attendance Calendar →</Link>
                 </div>
               </div>
+              )}
+              {masked && (
+                <div className="mt-4">
+                  <Link href={`/attendance?employee=${employee.id}`} className="btn btn-framed btn-sm">View / Edit Attendance Calendar →</Link>
+                </div>
+              )}
             </div>
           </div>
-        )
-      )}
+      ) : null}
 
       <h2 className="text-lg font-bold mb-4">Payment History</h2>
       {payments.length === 0 ? (
@@ -291,7 +349,13 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
         <div className="table-container">
           <table className="table">
             <thead>
-              <tr><th>Date</th><th>Type</th><th>For Month</th><th>Amount</th><th>Recorded By</th></tr>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>For Month</th>
+                {!masked && <th>Amount</th>}
+                <th>Recorded By</th>
+              </tr>
             </thead>
             <tbody>
               {payments.map((p) => (
@@ -303,9 +367,11 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                     </span>
                   </td>
                   <td>{MONTHS[p.month - 1]} {p.year}</td>
-                  <td className={`font-semibold ${p.type === "repayment" ? "amount-negative" : "amount-positive"}`}>
-                    {p.type === "repayment" ? "−" : ""}{formatINR(Number(p.amount))}
-                  </td>
+                  {!masked && (
+                    <td className={`font-semibold ${p.type === "repayment" ? "amount-negative" : "amount-positive"}`}>
+                      {p.type === "repayment" ? "−" : ""}{formatINR(Number(p.amount))}
+                    </td>
+                  )}
                   <td className="text-muted text-sm">{p.created_by_profile?.username ?? "Admin"}</td>
                 </tr>
               ))}

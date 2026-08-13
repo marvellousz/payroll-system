@@ -137,14 +137,9 @@ export default function EmployeesClient() {
           onChange={(e) => setFormData((f) => ({ ...f, paid_leave_days: e.target.value }))} />
       </div>
       {isAdmin && (
-        <label className="flex items-center gap-2 text-sm font-semibold" style={{ cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={formData.salary_hidden}
-            onChange={(e) => setFormData((f) => ({ ...f, salary_hidden: e.target.checked }))}
-          />
-          Hide from dashboard overview / mask salary
-        </label>
+        <p className="text-muted text-sm" style={{ marginTop: "-0.5rem" }}>
+          Staff accounts never see salary or other money amounts.
+        </p>
       )}
       <div className="modal-footer">
         <button className="btn btn-secondary" onClick={() => { setShowAdd(false); setEditEmployee(null); }}>Cancel</button>
@@ -162,10 +157,12 @@ export default function EmployeesClient() {
           <h1 className="page-title">Employees</h1>
           <p className="page-subtitle">Manage outlet staff, base salaries, and paid leave allowances</p>
         </div>
-        <button className="btn btn-primary" onClick={openAdd}>
-          <Plus size={18} strokeWidth={2.5} />
-          Add Employee
-        </button>
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={openAdd}>
+            <Plus size={18} strokeWidth={2.5} />
+            Add Employee
+          </button>
+        )}
       </div>
 
       {isLoading && !data ? (
@@ -186,7 +183,7 @@ export default function EmployeesClient() {
             <thead>
               <tr>
                 <th>Employee Name</th>
-                <th>Monthly Salary</th>
+                {isAdmin && <th>Monthly Salary</th>}
                 <th>Paid Leave</th>
                 <th>Actions</th>
               </tr>
@@ -205,16 +202,13 @@ export default function EmployeesClient() {
                         {emp.name.charAt(0).toUpperCase()}
                       </div>
                       <Link href={`/employees/${emp.id}`} className="text-primary" prefetch>{emp.name}</Link>
-                      {emp.salary_hidden && (
-                        <span className="badge badge-neutral" title="Hidden from dashboard overview; staff cannot see salary">
-                          Hidden from overview
-                        </span>
-                      )}
                     </div>
                   </td>
-                  <td className="font-extrabold text-base">
-                    {!isAdmin && emp.salary_hidden ? "—" : formatINR(Number(emp.monthly_salary))}
-                  </td>
+                  {isAdmin && (
+                    <td className="font-extrabold text-base">
+                      {formatINR(Number(emp.monthly_salary))}
+                    </td>
+                  )}
                   <td>
                     <span className="badge badge-accent">{emp.paid_leave_days} Days</span>
                   </td>

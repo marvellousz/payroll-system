@@ -8,13 +8,21 @@ import { formatINR } from "@/lib/payroll";
 import { invalidatePayrollCaches, swrKeys } from "@/lib/swr-config";
 import { prefetchOutletData } from "@/lib/prefetch";
 
-interface Employee { id: string; name: string; monthly_salary: string; paid_leave_days: number; }
+interface Employee {
+  id: string;
+  name: string;
+  monthly_salary: string;
+  paid_leave_days: number;
+  salary_hidden?: boolean;
+  salary_masked?: boolean;
+}
 interface PayrollData {
   days_present: number; days_absent: number; days_half: number; paid_leave_days: number;
   payable_days: number;
   base_pay: number; overtime_pay: number; overtime_total_units: number;
   overtime_rate_snapshot: number; total_pay: number; salary_given: number;
   previous_balance: number; monthly_balance: number; closing_balance: number;
+  salary_masked?: boolean;
 }
 
 const MONTHS = ["January","February","March","April","May","June",
@@ -99,6 +107,8 @@ function PaymentModal({ employee, month, year, onClose, onSuccess }: {
 
 export default function PayrollClient() {
   const { selectedOutletId } = useOutlets();
+  const { data: me } = useSWR<{ role: string }>(swrKeys.me());
+  const isAdmin = me?.role === "admin";
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -107,12 +117,14 @@ export default function PayrollClient() {
   const { data, isLoading, isValidating, mutate } = useSWR<{
     employees: Employee[];
     payroll: Record<string, PayrollData>;
+    money_hidden?: boolean;
   }>(
     selectedOutletId ? swrKeys.outletPayroll(selectedOutletId, month, year, "payroll") : null
   );
 
   const employees = data?.employees ?? [];
   const payrollMap = data?.payroll ?? {};
+  const moneyHidden = Boolean(data?.money_hidden) || (!isAdmin && me != null);
   const showSkeleton = isLoading && !data;
 
   useEffect(() => {
@@ -177,6 +189,7 @@ export default function PayrollClient() {
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           {employees.map((emp) => {
             const p = payrollMap[emp.id];
+            const hideMoney = moneyHidden || Boolean(emp.salary_masked || p?.salary_masked);
             return (
               <div key={emp.id} className="card">
                 {/* Employee header */}
@@ -191,48 +204,60 @@ export default function PayrollClient() {
                       {emp.name.charAt(0).toUpperCase()}
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div className="font-semibold truncate" style={{ fontSize: "1.0625rem" }}>{emp.name}</div>
-                      <div className="text-muted text-sm">Monthly: {formatINR(Number(emp.monthly_salary))}</div>
+                      <div className="font-semibold truncate" style={{ fontSize: "1.0625rem" }}>
+                        {emp.name}
+                      </div>
+                      {!hideMoney && (
+                        <div className="text-muted text-sm">
+                          Monthly: {formatINR(Number(emp.monthly_salary))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="card-header-row__actions">
                     <button className="btn btn-secondary btn-sm" onClick={() => setPaymentFor(emp)}>
                       + Record Payment / Repayment
                     </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => finalizePayroll(emp)} title="Save/finalize payroll summary">
-                      Save Summary
-                    </button>
+                    {isAdmin && (
+                      <button className="btn btn-secondary btn-sm" onClick={() => finalizePayroll(emp)} title="Save/finalize payroll summary">
+                        Save Summary
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {p ? (
                   <div className="payroll-split">
-                    {/* Pay Breakdown */}
+                    {/* Attendance / days — always visible */}
                     <div>
                       <div className="text-muted text-xs font-semibold mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                        Pay Breakdown
+                        {hideMoney ? "Attendance" : "Pay Breakdown"}
                       </div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Days Present</span><span>{p.days_present}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Half Days</span><span>{p.days_half}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Days Absent (incl. unmarked)</span><span>{p.days_absent}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Paid Leave</span><span>{p.paid_leave_days} days</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Payable Days</span><span>{p.payable_days}</span></div>
-                      <div className="payroll-line"><span className="text-secondary text-sm">Base Pay</span><span className="payroll-line__amount">{formatINR(p.base_pay)}</span></div>
-                      <div className="payroll-line">
-                        <span className="text-secondary text-sm">Overtime Pay
-                          <span className="text-muted" style={{ fontSize: "0.75rem", display: "block" }}>
-                            {p.overtime_total_units} OT day{p.overtime_total_units === 1 ? "" : "s"} × {formatINR(p.overtime_rate_snapshot)}/day
-                          </span>
-                        </span>
-                        <span className="payroll-line__amount">{formatINR(p.overtime_pay)}</span>
-                      </div>
-                      <div className="payroll-line total divider">
-                        <span>Total Pay</span>
-                        <span className="payroll-line__amount amount-positive">{formatINR(p.total_pay)}</span>
-                      </div>
+                      {!hideMoney && (
+                        <>
+                          <div className="payroll-line"><span className="text-secondary text-sm">Base Pay</span><span className="payroll-line__amount">{formatINR(p.base_pay)}</span></div>
+                          <div className="payroll-line">
+                            <span className="text-secondary text-sm">
+                              Overtime Pay
+                              <span className="text-muted"> ({p.overtime_total_units}×{Number(p.overtime_rate_snapshot)})</span>
+                            </span>
+                            <span className="payroll-line__amount">{formatINR(p.overtime_pay)}</span>
+                          </div>
+                          <div className="payroll-line total divider">
+                            <span>Total Pay</span>
+                            <span className="payroll-line__amount amount-positive">{formatINR(p.total_pay)}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    {/* Balance */}
+                    {/* Balance — admin only */}
+                    {!hideMoney && (
                     <div>
                       <div className="text-muted text-xs font-semibold mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>
                         Balance
@@ -269,6 +294,7 @@ export default function PayrollClient() {
                         {p.closing_balance === 0 && <span className="badge badge-success">Fully settled</span>}
                       </div>
                     </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-muted text-sm">No attendance data for this month. Mark attendance first.</div>

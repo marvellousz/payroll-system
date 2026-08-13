@@ -1320,8 +1320,15 @@ h5 { font-size: 1rem; font-weight: 600; }
 
 .attendance-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 1rem;
+}
+
+@media (max-width: 1100px) {
+  .attendance-stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.85rem;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1488,6 +1495,7 @@ h5 { font-size: 1rem; font-weight: 600; }
   }
   .attendance-stats .card-flat-emerald,
   .attendance-stats .card-flat-amber,
+  .attendance-stats .card-flat-blue,
   .attendance-stats .card-flat-muted {
     padding: 0.85rem 0.9rem;
   }
@@ -1660,6 +1668,7 @@ h5 { font-size: 1rem; font-weight: 600; }
   }
   .attendance-stats .card-flat-emerald,
   .attendance-stats .card-flat-amber,
+  .attendance-stats .card-flat-blue,
   .attendance-stats .card-flat-muted {
     padding: 0.75rem 0.7rem;
   }

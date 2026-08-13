@@ -16,6 +16,8 @@ interface Adjustment {
   created_at: string;
   undone_at: string | null;
   creator?: { username: string };
+  details?: string;
+  changes?: Array<{ id: string; name: string; from: number; to: number; label: string }>;
 }
 
 interface OtAdjustment {
@@ -47,6 +49,10 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+function formatPlainSalary(n: number) {
+  return Number.isInteger(n) ? String(n) : String(n);
+}
 
 export default function SettingsClient() {
   const { data: adjustments, mutate } = useSWR<Adjustment[]>(swrKeys.salaryAdjustments());
@@ -170,7 +176,7 @@ export default function SettingsClient() {
     return Number(emp.overtime_rate ?? 0);
   }
 
-  async function saveAllOtRates(applyToCurrentMonth: boolean) {
+  async function saveAllOtRates() {
     if (!otOutletId || !otEmployees?.length) return;
     setOtError("");
     setOtMessage("");
@@ -195,7 +201,7 @@ export default function SettingsClient() {
     }
 
     setOtSaving(true);
-    setOtApplyingMonth(applyToCurrentMonth);
+    setOtApplyingMonth(false);
     try {
       const res = await fetch("/api/settings/overtime-rates", {
         method: "POST",
@@ -203,7 +209,7 @@ export default function SettingsClient() {
         body: JSON.stringify({
           outlet_id: otOutletId,
           rates,
-          apply_current_month: applyToCurrentMonth,
+          apply_current_month: false,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -221,9 +227,45 @@ export default function SettingsClient() {
           )
         : [];
       setOtMessage(
-        applyToCurrentMonth
-          ? `Saved · applied to ${currentMonthLabel}\n${lines.join("\n")}`
-          : `Saved standing OT rates\n${lines.join("\n")}`
+        `Saved standing OT rates (current month unchanged)\n${lines.join("\n")}\nYou can now apply these rates to ${currentMonthLabel}.`
+      );
+    } finally {
+      setOtSaving(false);
+    }
+  }
+
+  async function applyOtRatesToCurrentMonth() {
+    if (!otOutletId || !otEmployees?.length) return;
+    setOtError("");
+    setOtMessage("");
+
+    // If there are unsaved draft edits, save them first together with apply.
+    const draftChanges = otEmployees.some(
+      (emp) => Number(otDraftValue(emp)) !== currentOt(emp)
+    );
+    if (draftChanges) {
+      setOtError("Save your OT rate changes first, then apply to the current month.");
+      return;
+    }
+
+    setOtSaving(true);
+    setOtApplyingMonth(true);
+    try {
+      const res = await fetch("/api/settings/overtime-rates/apply-month", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outlet_id: otOutletId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOtError(body.error || "Failed to apply OT rates to current month");
+        return;
+      }
+      void mutateOtAdj();
+      void invalidatePayrollCaches(otOutletId);
+      const lines = Array.isArray(body.lines) ? body.lines : [];
+      setOtMessage(
+        `Applied standing OT rates to ${currentMonthLabel}\n${lines.join("\n")}`
       );
     } finally {
       setOtSaving(false);
@@ -263,7 +305,7 @@ export default function SettingsClient() {
         <h2 className="text-lg font-bold mb-1">Overtime rate</h2>
         <p className="text-secondary text-sm mb-4">
           {selectedOutlet
-            ? `Per employee · ${selectedOutlet.name}`
+            ? `Per employee · ${selectedOutlet.name}. Save the new standing rate first, then Apply if this month should use it.`
             : "Select an outlet in the header"}
         </p>
 
@@ -334,7 +376,7 @@ export default function SettingsClient() {
                 type="button"
                 className="btn btn-primary btn-sm"
                 disabled={otSaving}
-                onClick={() => void saveAllOtRates(false)}
+                onClick={() => void saveAllOtRates()}
                 style={{
                   minHeight: 34,
                   padding: "0.35rem 0.9rem",
@@ -355,13 +397,13 @@ export default function SettingsClient() {
                 type="button"
                 className="btn btn-secondary btn-sm"
                 disabled={otSaving}
-                onClick={() => void saveAllOtRates(true)}
+                onClick={() => void applyOtRatesToCurrentMonth()}
                 style={{
                   minHeight: 34,
                   padding: "0.35rem 0.9rem",
                   width: "auto",
                 }}
-                title={`Also recalculate OT pay for ${currentMonthLabel}`}
+                title={`Recalculate OT pay for ${currentMonthLabel} using saved standing rates`}
               >
                 {otSaving && otApplyingMonth ? (
                   <>
@@ -481,8 +523,7 @@ export default function SettingsClient() {
             <thead>
               <tr>
                 <th>When</th>
-                <th>Scope</th>
-                <th>Change</th>
+                <th>Details</th>
                 <th>By</th>
                 <th>Status</th>
                 <th></th>
@@ -500,11 +541,15 @@ export default function SettingsClient() {
                       minute: "2-digit",
                     })}
                   </td>
-                  <td>{a.scope === "all" ? "All employees" : "One employee"}</td>
-                  <td className="font-semibold">
-                    {a.mode === "percent"
-                      ? `${Number(a.value)}%`
-                      : formatINR(Number(a.value))}
+                  <td className="font-semibold" style={{ whiteSpace: "pre-line" }}>
+                    {a.changes?.length
+                      ? a.changes
+                          .map((c) => `${c.name} ${formatPlainSalary(c.from)} → ${formatPlainSalary(c.to)}`)
+                          .join("\n")
+                      : a.details ||
+                        (a.mode === "percent"
+                          ? `${Number(a.value)}%`
+                          : formatINR(Number(a.value)))}
                   </td>
                   <td className="text-muted text-sm">{a.creator?.username ?? "—"}</td>
                   <td>

@@ -29,16 +29,18 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Staff: mask salary if hidden
-  if (profile.role !== "admin" && employee.salary_hidden) {
+  // Staff: never see salary figures
+  if (profile.role !== "admin") {
     return NextResponse.json({
       ...employee,
       monthly_salary: null,
+      overtime_rate: null,
       salary_masked: true,
+      money_hidden: true,
     });
   }
 
-  return NextResponse.json(employee);
+  return NextResponse.json({ ...employee, salary_masked: false, money_hidden: false });
 }
 
 // PATCH /api/employees/:id — admin only

@@ -20,11 +20,15 @@ export async function GET(
     orderBy: { name: "asc" },
   });
 
+  // Staff: never receive salary / OT rate figures
   const safe = isAdmin(profile)
     ? employees
-    : employees.map((e) =>
-        e.salary_hidden ? { ...e, monthly_salary: 0 as unknown as typeof e.monthly_salary } : e
-      );
+    : employees.map((e) => ({
+        ...e,
+        monthly_salary: 0 as unknown as typeof e.monthly_salary,
+        overtime_rate: 0 as unknown as typeof e.overtime_rate,
+        salary_masked: true,
+      }));
 
   return NextResponse.json(safe, {
     headers: { "Cache-Control": "private, max-age=20, stale-while-revalidate=60" },

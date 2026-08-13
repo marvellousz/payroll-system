@@ -101,7 +101,7 @@ export function buildPayrollBreakdown(
   payments: PaymentRow[],
   prevSummary: SummaryRow | undefined,
   existingSummary: SummaryRow | undefined,
-  options?: { forceNewOtRate?: boolean }
+  options?: { forceNewOtRate?: boolean; overtimeRateOverride?: number }
 ): PayrollBreakdown {
   const days_present = attendance.filter((r) => r.status === "present").length;
   const days_half = attendance.filter((r) => r.status === "half").length;
@@ -119,8 +119,13 @@ export function buildPayrollBreakdown(
   const salary_given = netSalaryGiven(payments);
   const previous_balance = prevSummary ? Number(prevSummary.closing_balance) : 0;
 
-  const currentRate = resolveOvertimeRate(employee);
+  const override =
+    options?.overtimeRateOverride != null && Number.isFinite(Number(options.overtimeRateOverride))
+      ? Number(options.overtimeRateOverride)
+      : null;
+  const currentRate = override != null ? override : resolveOvertimeRate(employee);
   const locked =
+    override == null &&
     !options?.forceNewOtRate &&
     existingSummary?.overtime_rate_snapshot != null &&
     Number(existingSummary.overtime_rate_snapshot) >= 0
@@ -260,7 +265,7 @@ export async function computeEmployeePayroll(
   orgId: string,
   month: number,
   year: number,
-  options?: { forceNewOtRate?: boolean }
+  options?: { forceNewOtRate?: boolean; overtimeRateOverride?: number }
 ) {
   const employee = await prisma.employee.findFirst({
     where: { id: employeeId, outlet: { org_id: orgId } },
@@ -324,7 +329,7 @@ export async function saveEmployeePayrollSummary(
   orgId: string,
   month: number,
   year: number,
-  options?: { forceNewOtRate?: boolean }
+  options?: { forceNewOtRate?: boolean; overtimeRateOverride?: number }
 ) {
   const computed = await computeEmployeePayroll(employeeId, orgId, month, year, options);
   if (!computed) return null;

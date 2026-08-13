@@ -14,6 +14,8 @@ interface Employee {
   name: string;
   monthly_salary: string;
   paid_leave_days: number;
+  salary_hidden?: boolean;
+  salary_masked?: boolean;
 }
 
 interface PayrollData {
@@ -24,11 +26,14 @@ interface PayrollData {
   payable_days: number;
   base_pay: number;
   overtime_pay: number;
+  overtime_total_units?: number;
+  overtime_rate_snapshot?: number;
   total_pay: number;
   salary_given: number;
   previous_balance: number;
   monthly_balance: number;
   closing_balance: number;
+  salary_masked?: boolean;
 }
 
 const MONTHS = [
@@ -67,9 +72,18 @@ export default function DashboardClient() {
     else setMonth((m) => m + 1);
   }
 
-  const totalPayroll = Object.values(payrollMap).reduce((s, p) => s + p.total_pay, 0);
-  const totalGiven   = Object.values(payrollMap).reduce((s, p) => s + p.salary_given, 0);
-  const totalBalance = Object.values(payrollMap).reduce((s, p) => s + p.closing_balance, 0);
+  const visiblePayroll = Object.entries(payrollMap).filter(([id, p]) => {
+    const emp = employees.find((e) => e.id === id);
+    return !(emp?.salary_masked || p.salary_masked);
+  });
+  const totalPayroll = visiblePayroll.reduce((s, [, p]) => s + p.total_pay, 0);
+  const totalGiven = visiblePayroll.reduce((s, [, p]) => s + p.salary_given, 0);
+  const totalBalance = visiblePayroll.reduce((s, [, p]) => s + p.closing_balance, 0);
+
+  function money(emp: Employee, p: PayrollData | undefined, value: number) {
+    if (emp.salary_masked || p?.salary_masked) return "—";
+    return formatINR(value);
+  }
 
   return (
     <div className="page-content">
@@ -133,6 +147,7 @@ export default function DashboardClient() {
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               {employees.map((emp) => {
                 const p = payrollMap[emp.id];
+                const masked = Boolean(emp.salary_masked || p?.salary_masked);
                 return (
                   <div key={emp.id} className="card">
                     <div className="card-header-row mb-4 pb-4 border-b">
@@ -148,9 +163,16 @@ export default function DashboardClient() {
                           {emp.name.charAt(0).toUpperCase()}
                         </div>
                         <div style={{ minWidth: 0 }}>
-                          <div className="font-bold text-lg truncate">{emp.name}</div>
+                          <div className="font-bold text-lg truncate">
+                            {emp.name}
+                            {masked && (
+                              <span className="badge badge-neutral" style={{ marginLeft: 8, fontSize: "0.65rem" }}>
+                                Salary hidden
+                              </span>
+                            )}
+                          </div>
                           <div className="text-secondary text-sm font-medium">
-                            Monthly: {formatINR(Number(emp.monthly_salary))} · Paid Leave: {emp.paid_leave_days}d
+                            Monthly: {masked ? "—" : formatINR(Number(emp.monthly_salary))} · Paid Leave: {emp.paid_leave_days}d
                           </div>
                         </div>
                       </div>
@@ -162,6 +184,9 @@ export default function DashboardClient() {
                     </div>
 
                     {p ? (
+                      masked ? (
+                        <p className="text-secondary text-sm font-medium">Salary details hidden for this employee.</p>
+                      ) : (
                       <div className="payroll-split" style={{ gap: "1.5rem" }}>
                         <div>
                           <div className="text-muted text-xs font-bold uppercase mb-2">Pay Breakdown</div>
@@ -170,15 +195,23 @@ export default function DashboardClient() {
                           <div className="payroll-line"><span className="text-secondary">Days Absent</span><span className="font-bold">{p.days_absent}</span></div>
                           <div className="payroll-line"><span className="text-secondary">Paid Leave</span><span className="font-bold">{p.paid_leave_days}d</span></div>
                           <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-bold">{p.payable_days}</span></div>
-                          <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{formatINR(p.base_pay)}</span></div>
-                          <div className="payroll-line"><span className="text-secondary">Overtime Pay</span><span className="payroll-line__amount">{formatINR(p.overtime_pay)}</span></div>
-                          <div className="payroll-line total divider"><span>Total Pay</span><span className="payroll-line__amount amount-positive">{formatINR(p.total_pay)}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{money(emp, p, p.base_pay)}</span></div>
+                          <div className="payroll-line">
+                            <span className="text-secondary">
+                              Overtime Pay
+                              {p.overtime_total_units != null && p.overtime_rate_snapshot != null && (
+                                <span className="text-muted"> ({p.overtime_total_units}×{Number(p.overtime_rate_snapshot)})</span>
+                              )}
+                            </span>
+                            <span className="payroll-line__amount">{money(emp, p, p.overtime_pay)}</span>
+                          </div>
+                          <div className="payroll-line total divider"><span>Total Pay</span><span className="payroll-line__amount amount-positive">{money(emp, p, p.total_pay)}</span></div>
                         </div>
                         <div>
                           <div className="text-muted text-xs font-bold uppercase mb-2">Balance Summary</div>
-                          <div className="payroll-line"><span className="text-secondary">Salary Given</span><span className="payroll-line__amount">{formatINR(p.salary_given)}</span></div>
-                          <div className="payroll-line"><span className="text-secondary">Previous Balance</span><span className={`payroll-line__amount ${p.previous_balance >= 0 ? "" : "amount-negative"}`}>{formatINR(p.previous_balance)}</span></div>
-                          <div className="payroll-line total divider"><span>Current Balance</span><span className={`payroll-line__amount ${p.closing_balance >= 0 ? "amount-positive" : "amount-negative"}`}>{formatINR(p.closing_balance)}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Salary Given</span><span className="payroll-line__amount">{money(emp, p, p.salary_given)}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Previous Balance</span><span className={`payroll-line__amount ${p.previous_balance >= 0 ? "" : "amount-negative"}`}>{money(emp, p, p.previous_balance)}</span></div>
+                          <div className="payroll-line total divider"><span>Current Balance</span><span className={`payroll-line__amount ${p.closing_balance >= 0 ? "amount-positive" : "amount-negative"}`}>{money(emp, p, p.closing_balance)}</span></div>
                           <div style={{ marginTop: "1rem" }}>
                             {p.closing_balance > 0 && <span className="badge badge-warning">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} Owed</span>}
                             {p.closing_balance < 0 && <span className="badge badge-danger">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} Advance</span>}
@@ -186,6 +219,7 @@ export default function DashboardClient() {
                           </div>
                         </div>
                       </div>
+                      )
                     ) : (
                       <div className="text-secondary text-sm font-medium">No attendance data for this month.</div>
                     )}

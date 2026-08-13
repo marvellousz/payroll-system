@@ -2,6 +2,86 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthProfile, isAdmin, logAudit } from "@/lib/audit";
 
+type SnapshotRow = {
+  id: string;
+  name?: string;
+  monthly_salary: number;
+  new_salary?: number;
+};
+
+function nextSalary(current: number, mode: string, amount: number) {
+  const raw =
+    mode === "percent"
+      ? Math.round(current * (1 + amount / 100) * 100) / 100
+      : Math.round((current + amount) * 100) / 100;
+  return Math.max(0, raw);
+}
+
+function formatPlain(n: number) {
+  return Number.isInteger(n) ? String(n) : String(n);
+}
+
+async function enrichAdjustments(
+  adjustments: Array<{
+    id: string;
+    scope: string;
+    mode: string;
+    value: unknown;
+    snapshot: string;
+    [key: string]: unknown;
+  }>
+) {
+  const ids = new Set<string>();
+  const parsed: SnapshotRow[][] = [];
+
+  for (const a of adjustments) {
+    let rows: SnapshotRow[] = [];
+    try {
+      rows = JSON.parse(a.snapshot) as SnapshotRow[];
+    } catch {
+      rows = [];
+    }
+    parsed.push(rows);
+    for (const r of rows) {
+      if (r.id && !r.name) ids.add(r.id);
+    }
+  }
+
+  const nameById = new Map<string, string>();
+  if (ids.size > 0) {
+    const emps = await prisma.employee.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true },
+    });
+    for (const e of emps) nameById.set(e.id, e.name);
+  }
+
+  return adjustments.map((a, i) => {
+    const amount = Number(a.value);
+    const changes = parsed[i].map((r) => {
+      const from = Number(r.monthly_salary);
+      const to =
+        r.new_salary != null && Number.isFinite(Number(r.new_salary))
+          ? Number(r.new_salary)
+          : nextSalary(from, a.mode, amount);
+      const name = r.name || nameById.get(r.id) || "Employee";
+      return {
+        id: r.id,
+        name,
+        from,
+        to,
+        label: `${name} ${formatPlain(from)} → ${formatPlain(to)}`,
+      };
+    });
+
+    return {
+      ...a,
+      changes,
+      details: changes.map((c) => c.label).join("\n"),
+    };
+  });
+}
+
 // GET /api/settings/salary-adjustments — list recent adjustments
 export async function GET() {
   const profile = await getAuthProfile();
@@ -17,7 +97,7 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json(adjustments);
+  return NextResponse.json(await enrichAdjustments(adjustments));
 }
 
 // POST /api/settings/salary-adjustments — apply % or fixed ₹ change
@@ -67,23 +147,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No employees found" }, { status: 404 });
   }
 
-  const snapshot = employees.map((e) => ({
-    id: e.id,
-    monthly_salary: Number(e.monthly_salary),
-  }));
+  const snapshot = employees.map((e) => {
+    const from = Number(e.monthly_salary);
+    const to = nextSalary(from, mode, amount);
+    return {
+      id: e.id,
+      name: e.name,
+      monthly_salary: from,
+      new_salary: to,
+    };
+  });
 
   await prisma.$transaction(
-    employees.map((e) => {
-      const current = Number(e.monthly_salary);
-      const next =
-        mode === "percent"
-          ? Math.round(current * (1 + amount / 100) * 100) / 100
-          : Math.round((current + amount) * 100) / 100;
-      return prisma.employee.update({
-        where: { id: e.id },
-        data: { monthly_salary: Math.max(0, next) },
-      });
-    })
+    snapshot.map((row) =>
+      prisma.employee.update({
+        where: { id: row.id },
+        data: { monthly_salary: row.new_salary },
+      })
+    )
   );
 
   const adjustment = await prisma.salaryAdjustment.create({
@@ -98,10 +179,9 @@ export async function POST(request: Request) {
     },
   });
 
-  const targetLabel =
-    scope === "all"
-      ? `all employees (${employees.length})`
-      : employees[0]?.name ?? "employee";
+  const detailLines = snapshot.map(
+    (r) => `${r.name} ${formatPlain(r.monthly_salary)} → ${formatPlain(r.new_salary)}`
+  );
   const modeLabel = mode === "percent" ? `${amount}%` : `₹${amount.toLocaleString("en-IN")}`;
 
   await logAudit({
@@ -111,29 +191,29 @@ export async function POST(request: Request) {
     entity_id: adjustment.id,
     field_changed: "apply",
     old_value: null,
-    new_value: `Adjusted ${targetLabel} by ${modeLabel}`,
+    new_value: `${detailLines.join("; ")} (${modeLabel})`,
     highlighted: true,
   });
 
-  // Highlight individual base salary changes for employee scope
-  if (scope === "employee" && employees[0]) {
-    const e = employees[0];
-    const current = Number(e.monthly_salary);
-    const next =
-      mode === "percent"
-        ? Math.round(current * (1 + amount / 100) * 100) / 100
-        : Math.round((current + amount) * 100) / 100;
+  for (const row of snapshot) {
     await logAudit({
       org_id: profile.org_id,
       user_id: profile.id,
       entity_type: "Employee",
-      entity_id: e.id,
+      entity_id: row.id,
       field_changed: "monthly_salary",
-      old_value: String(current),
-      new_value: String(Math.max(0, next)),
+      old_value: String(row.monthly_salary),
+      new_value: String(row.new_salary),
       highlighted: true,
     });
   }
 
-  return NextResponse.json(adjustment, { status: 201 });
+  const [enriched] = await enrichAdjustments([
+    {
+      ...adjustment,
+      creator: { username: profile.username },
+    },
+  ]);
+
+  return NextResponse.json(enriched, { status: 201 });
 }

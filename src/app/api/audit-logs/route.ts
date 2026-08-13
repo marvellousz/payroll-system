@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthProfile, isAdmin, logAudit } from "@/lib/audit";
+import { redactAuditMoney } from "@/lib/money-visibility";
 
 // GET /api/audit-logs?entity_type=&entity_id=&user_id=&date_from=&date_to=&page=&limit=
 export async function GET(request: Request) {
@@ -41,7 +42,13 @@ export async function GET(request: Request) {
   ]);
 
   return NextResponse.json(
-    { logs, total, page, limit, pages: Math.ceil(total / limit) },
+    {
+      logs: isAdmin(profile) ? logs : logs.map(redactAuditMoney),
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    },
     { headers: { "Cache-Control": "private, max-age=10, stale-while-revalidate=30" } }
   );
 }

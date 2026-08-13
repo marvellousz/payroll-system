@@ -104,12 +104,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No OT rate changes to save" }, { status: 400 });
   }
 
-  const now = new Date();
-  const applyMonth = applyCurrentMonth ? now.getMonth() + 1 : null;
-  const applyYear = applyCurrentMonth ? now.getFullYear() : null;
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const applyMonth = applyCurrentMonth ? currentMonth : null;
+  const applyYear = applyCurrentMonth ? currentYear : null;
 
   const detailLines = changes.map((c) => formatRateLine(c.name, c.from, c.to));
   const details = detailLines.join("\n");
+
+  // Save alone = standing rates going forward. Freeze current month at the
+  // pre-change OT rate so live payroll does not pick up the new rate until
+  // "Apply … current month" is used.
+  if (!applyCurrentMonth) {
+    for (const c of changes) {
+      await saveEmployeePayrollSummary(
+        c.id,
+        profile.org_id,
+        currentMonth,
+        currentYear,
+        { forceNewOtRate: false }
+      );
+    }
+  }
 
   await prisma.$transaction(
     changes.map((c) =>

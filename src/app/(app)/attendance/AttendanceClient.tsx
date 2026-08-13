@@ -182,6 +182,12 @@ export default function AttendanceClient() {
   const presentCount = Object.values(records).filter((r) => r.status === "present").length;
   const halfCount = Object.values(records).filter((r) => r.status === "half").length;
   const absentCount = Object.values(records).filter((r) => r.status === "absent").length;
+  const otCount = Object.values(records).filter(
+    (r) =>
+      r.status === "present" &&
+      r.overtime_units != null &&
+      Number(r.overtime_units) > 0
+  ).length;
 
   const today = new Date();
   const loadingRecords = isLoading && !attendanceList;
@@ -246,6 +252,11 @@ export default function AttendanceClient() {
             <div className="stat-card__label text-danger">Absent</div>
             <div className="stat-card__value text-danger">{absentCount}</div>
             <div className="stat-card__sub font-bold">days this month</div>
+          </div>
+          <div className="card-flat-blue">
+            <div className="stat-card__label text-blue">Overtime</div>
+            <div className="stat-card__value text-blue">{otCount}</div>
+            <div className="stat-card__sub font-bold">OT days this month</div>
           </div>
           <div className="card-flat-muted">
             <div className="stat-card__label">Unmarked</div>

@@ -1,8 +1,24 @@
 import { NextResponse } from "next/server";
-import { canAccessOutlet, getAuthProfile, isAdmin } from "@/lib/audit";
-import { computeOutletPayroll } from "@/lib/payroll-server";
+import { canAccessOutlet, getAuthProfile } from "@/lib/audit";
+import { canViewMoney } from "@/lib/money-visibility";
+import { computeOutletPayroll, type PayrollBreakdown } from "@/lib/payroll-server";
 
-// GET /api/outlets/:id/payroll?month=&year=&for=dashboard|payroll
+function maskPayrollRow(row: PayrollBreakdown): PayrollBreakdown & { salary_masked: true } {
+  return {
+    ...row,
+    base_pay: 0,
+    overtime_pay: 0,
+    total_pay: 0,
+    salary_given: 0,
+    previous_balance: 0,
+    monthly_balance: 0,
+    closing_balance: 0,
+    overtime_rate_snapshot: 0,
+    salary_masked: true,
+  };
+}
+
+// GET /api/outlets/:id/payroll?month=&year=
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -18,7 +34,6 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const month = Number(searchParams.get("month"));
   const year = Number(searchParams.get("year"));
-  const forPage = searchParams.get("for") === "payroll" ? "payroll" : "dashboard";
 
   if (!month || !year) {
     return NextResponse.json({ error: "month and year are required" }, { status: 400 });
@@ -29,34 +44,25 @@ export async function GET(
   });
   if (!result) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
 
-  // Overview: never show salary_hidden employees
-  // Payroll: admin sees all; staff only non-hidden
-  let employees = result.employees;
-  if (forPage === "dashboard") {
-    employees = employees.filter((e) => !e.salary_hidden);
-  } else if (!isAdmin(profile)) {
-    employees = employees.filter((e) => !e.salary_hidden);
-  }
+  const showMoney = canViewMoney(profile);
+  const employees = result.employees;
 
-  const payroll: typeof result.payroll = {};
+  const payroll: Record<string, PayrollBreakdown | (PayrollBreakdown & { salary_masked: true })> = {};
   for (const emp of employees) {
     const row = result.payroll[emp.id];
     if (!row) continue;
-    // Staff: mask salary figures for hidden (already filtered) — also mask monthly_salary on list
-    if (!isAdmin(profile) && emp.salary_hidden) continue;
-    payroll[emp.id] = row;
+    payroll[emp.id] = showMoney ? row : maskPayrollRow(row);
   }
 
-  const safeEmployees = isAdmin(profile)
-    ? employees
-    : employees.map((e) =>
-        e.salary_hidden
-          ? { ...e, monthly_salary: "0" }
-          : e
-      );
+  const safeEmployees = employees.map((e) => {
+    if (!showMoney) {
+      return { ...e, monthly_salary: "0", overtime_rate: "0", salary_masked: true };
+    }
+    return { ...e, salary_masked: false };
+  });
 
   return NextResponse.json(
-    { employees: safeEmployees, payroll },
+    { employees: safeEmployees, payroll, money_hidden: !showMoney },
     { headers: { "Cache-Control": "private, max-age=20, stale-while-revalidate=90" } }
   );
 }

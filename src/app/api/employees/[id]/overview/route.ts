@@ -1,7 +1,23 @@
 import { NextResponse } from "next/server";
 import { getAuthProfile } from "@/lib/audit";
+import { canViewMoney } from "@/lib/money-visibility";
 import { prisma } from "@/lib/prisma";
-import { computeEmployeePayroll } from "@/lib/payroll-server";
+import { computeEmployeePayroll, type PayrollBreakdown } from "@/lib/payroll-server";
+
+function maskPayrollRow(row: PayrollBreakdown): PayrollBreakdown & { salary_masked: true } {
+  return {
+    ...row,
+    base_pay: 0,
+    overtime_pay: 0,
+    total_pay: 0,
+    salary_given: 0,
+    previous_balance: 0,
+    monthly_balance: 0,
+    closing_balance: 0,
+    overtime_rate_snapshot: 0,
+    salary_masked: true,
+  };
+}
 
 // GET /api/employees/:id/overview?month=&year=
 export async function GET(
@@ -31,11 +47,30 @@ export async function GET(
 
   if (!computed) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const hideMoney = !canViewMoney(profile);
+  const employee = hideMoney
+    ? {
+        ...computed.employee,
+        monthly_salary: "0",
+        overtime_rate: "0",
+        salary_masked: true,
+      }
+    : { ...computed.employee, salary_masked: false };
+
+  const payroll =
+    hideMoney && computed.payroll ? maskPayrollRow(computed.payroll) : computed.payroll;
+
+  const safePayments = hideMoney
+    ? payments.map((p) => ({ ...p, amount: "0" }))
+    : payments;
+
   return NextResponse.json(
     {
-      employee: computed.employee,
-      payroll: computed.payroll,
-      payments,
+      employee,
+      payroll,
+      payments: safePayments,
+      salary_masked: hideMoney,
+      money_hidden: hideMoney,
     },
     {
       headers: {

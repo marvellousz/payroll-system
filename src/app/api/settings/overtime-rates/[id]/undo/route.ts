@@ -5,6 +5,19 @@ import { saveEmployeePayrollSummary } from "@/lib/payroll-server";
 
 type SnapshotRow = { id: string; name: string; overtime_rate: number };
 
+type ApplyMonthSnapshot = {
+  kind: "apply_month";
+  month: number;
+  year: number;
+  rates: SnapshotRow[];
+};
+
+function isApplyMonthSnapshot(value: unknown): value is ApplyMonthSnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const v = value as ApplyMonthSnapshot;
+  return v.kind === "apply_month" && Array.isArray(v.rates);
+}
+
 // POST /api/settings/overtime-rates/:id/undo — restore previous OT rates (admin)
 export async function POST(
   _request: Request,
@@ -24,10 +37,49 @@ export async function POST(
     return NextResponse.json({ error: "Already undone" }, { status: 400 });
   }
 
-  let snapshot: SnapshotRow[] = [];
+  let parsed: unknown;
   try {
-    snapshot = JSON.parse(adjustment.snapshot) as SnapshotRow[];
+    parsed = JSON.parse(adjustment.snapshot);
   } catch {
+    return NextResponse.json({ error: "Invalid snapshot data" }, { status: 500 });
+  }
+
+  // Apply-month only: re-lock that month to the previous OT snapshots (standing rates stay).
+  if (isApplyMonthSnapshot(parsed)) {
+    const month = parsed.month || adjustment.apply_month;
+    const year = parsed.year || adjustment.apply_year;
+    if (!month || !year) {
+      return NextResponse.json({ error: "Missing apply month on adjustment" }, { status: 400 });
+    }
+
+    for (const row of parsed.rates) {
+      await saveEmployeePayrollSummary(row.id, profile.org_id, month, year, {
+        forceNewOtRate: true,
+        overtimeRateOverride: Number(row.overtime_rate),
+      });
+    }
+
+    await prisma.overtimeRateAdjustment.update({
+      where: { id },
+      data: { undone_at: new Date() },
+    });
+
+    await logAudit({
+      org_id: profile.org_id,
+      user_id: profile.id,
+      entity_type: "OvertimeRateAdjustment",
+      entity_id: id,
+      field_changed: "undo",
+      old_value: adjustment.details,
+      new_value: `Undid apply-month OT (${parsed.rates.length} employee${parsed.rates.length === 1 ? "" : "s"})`,
+      highlighted: true,
+    });
+
+    return NextResponse.json({ success: true, kind: "apply_month" });
+  }
+
+  const snapshot = parsed as SnapshotRow[];
+  if (!Array.isArray(snapshot)) {
     return NextResponse.json({ error: "Invalid snapshot data" }, { status: 500 });
   }
 
