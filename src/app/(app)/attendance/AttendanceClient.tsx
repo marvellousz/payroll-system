@@ -16,6 +16,7 @@ interface AttendanceRecord {
   status: "present" | "absent" | "half";
   overtime_units: number | null;
 }
+interface Me { role: string; }
 
 const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
@@ -30,16 +31,33 @@ function recordsToMap(data: AttendanceRecord[] | undefined): Record<number, Atte
   return map;
 }
 
+function toYmd(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function localYmd(d = new Date()) {
+  return toYmd(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+function addDaysYmd(ymd: string, delta: number) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + delta);
+  return toYmd(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+}
+
 export default function AttendanceClient() {
   const searchParams = useSearchParams();
   const { selectedOutletId } = useOutlets();
   const now = new Date();
+  const { data: me } = useSWR<Me>(swrKeys.me());
+  const isStaff = me?.role === "staff";
 
   const [selectedEmployee, setSelectedEmployee] = useState(searchParams.get("employee") ?? "");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [records, setRecords] = useState<Record<number, AttendanceRecord>>({});
   const [savingDate, setSavingDate] = useState<string | null>(null);
+  const [editingDay, setEditingDay] = useState<number | null>(null);
 
   const { data: employees = [] } = useSWR<Employee[]>(
     selectedOutletId ? swrKeys.employees(selectedOutletId) : null
@@ -61,6 +79,21 @@ export default function AttendanceClient() {
     if (savingDate) return;
     setRecords(recordsToMap(attendanceList));
   }, [attendanceList, savingDate]);
+
+  useEffect(() => {
+    setEditingDay(null);
+  }, [selectedEmployee, month, year]);
+
+  function dayMark(rec: AttendanceRecord | undefined): "P" | "A" | "Ot" | "H" | null {
+    if (!rec) return null;
+    if (rec.status === "absent") return "A";
+    if (rec.status === "half") return "H";
+    if (rec.status === "present") {
+      if (rec.overtime_units != null && Number(rec.overtime_units) > 0) return "Ot";
+      return "P";
+    }
+    return null;
+  }
 
   async function saveAttendance(
     day: number,
@@ -133,27 +166,6 @@ export default function AttendanceClient() {
     }
   }
 
-  async function toggleOt(day: number) {
-    const rec = records[day];
-    const hasOt =
-      rec?.status === "present" &&
-      rec.overtime_units != null &&
-      Number(rec.overtime_units) > 0;
-    // Tap Ot alone = Present + OT; tap again clears OT (stays Present)
-    await saveAttendance(day, "present", hasOt ? null : 1);
-  }
-
-  async function toggleHalf(day: number) {
-    const rec = records[day];
-    if (rec?.status === "absent") return;
-    if (rec?.status === "half") {
-      await saveAttendance(day, "present", null);
-      return;
-    }
-    // Half day clears OT — overtime only applies to full present days
-    await saveAttendance(day, "half", null);
-  }
-
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear((y) => y - 1); }
     else setMonth((m) => m - 1);
@@ -172,15 +184,25 @@ export default function AttendanceClient() {
   const absentCount = Object.values(records).filter((r) => r.status === "absent").length;
 
   const today = new Date();
-  const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
   const loadingRecords = isLoading && !attendanceList;
+  const todayStr = localYmd(today);
+  const yesterdayStr = addDaysYmd(todayStr, -1);
+
+  function isDayEditable(dateStr: string) {
+    if (!isStaff) return true; // admin (and while role loads)
+    return dateStr === todayStr || dateStr === yesterdayStr;
+  }
 
   return (
     <div className="page-content">
       <div className="page-header">
         <div>
           <h1 className="page-title">Attendance Calendar</h1>
-          <p className="page-subtitle">Track daily presence, absence, half-days, and overtime</p>
+          <p className="page-subtitle">
+            {isStaff
+              ? "Staff can mark today and yesterday only"
+              : "Track daily presence, absence, half-days, and overtime"}
+          </p>
         </div>
         <div className="month-nav month-nav--emphasis">
           <button className="btn btn-ghost btn-icon" onClick={prevMonth} aria-label="Previous month">
@@ -263,86 +285,105 @@ export default function AttendanceClient() {
 
                   {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
                     const rec = records[day];
-                    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    const dateStr = toYmd(year, month, day);
                     const isSaving = savingDate === dateStr;
-                    const isFuture = isCurrentMonth && day > today.getDate();
-                    const isToday = isCurrentMonth && day === today.getDate();
+                    const editable = isDayEditable(dateStr);
+                    const isFuture = isStaff && dateStr > todayStr;
+                    const isLocked = !editable;
+                    const isToday = dateStr === todayStr;
+                    const mark = dayMark(rec);
+                    const hasOt = mark === "Ot";
+                    const isEditing = editable && (editingDay === day || !mark);
 
                     let dayClass = "attendance-day unmarked";
-                    const hasOt =
-                      rec?.status === "present" &&
-                      rec.overtime_units != null &&
-                      Number(rec.overtime_units) > 0;
                     if (isFuture) dayClass = "attendance-day future";
                     else if (hasOt) dayClass = "attendance-day ot";
                     else if (rec?.status === "present") dayClass = "attendance-day present";
                     else if (rec?.status === "half") dayClass = "attendance-day half";
                     else if (rec?.status === "absent") dayClass = "attendance-day absent";
                     if (isToday) dayClass += " today";
+                    if (isLocked && !isFuture) dayClass += " is-locked";
+                    if (isEditing) dayClass += " is-editing";
+
+                    async function pick(
+                      action: () => void | Promise<void>
+                    ) {
+                      await action();
+                      setEditingDay(null);
+                    }
 
                     return (
                       <div key={day} className={`${dayClass}${isSaving ? " is-saving" : ""}`}>
                         <span className="attendance-day__date">{day}</span>
 
-                        <div className="toggle-group attendance-day__toggles" role="group" aria-label="Attendance">
+                        {mark && (!editable || !isEditing) ? (
                           <button
                             type="button"
-                            className={`toggle-btn ${rec?.status === "present" ? "active-present" : ""}`}
+                            className="attendance-day__mark"
+                            disabled={isSaving || isLocked}
                             onClick={() => {
-                              if (!isFuture) {
-                                // Keep OT only when already present; otherwise start clean
-                                const keepOt =
-                                  rec?.status === "present"
-                                    ? (rec.overtime_units ?? null)
-                                    : null;
-                                void saveAttendance(day, "present", keepOt);
-                              }
+                              if (editable) setEditingDay(day);
                             }}
-                            disabled={isFuture || isSaving}
-                            title="Present"
-                          >
-                            P
-                          </button>
-                          <button
-                            type="button"
-                            className={`toggle-btn ${rec?.status === "absent" ? "active-absent" : ""}`}
-                            onClick={() => {
-                              if (!isFuture) void saveAttendance(day, "absent", null);
-                            }}
-                            disabled={isFuture || isSaving}
-                            title="Absent"
-                          >
-                            A
-                          </button>
-                          <button
-                            type="button"
-                            className={`toggle-btn ${rec?.overtime_units != null && Number(rec.overtime_units) > 0 && rec?.status === "present" ? "active-ot" : ""}`}
-                            onClick={() => {
-                              if (!isFuture && !isSaving) void toggleOt(day);
-                            }}
-                            disabled={isFuture || isSaving}
                             title={
-                              rec?.status === "present" &&
-                              rec?.overtime_units != null &&
-                              Number(rec.overtime_units) > 0
-                                ? "Overtime on (tap to clear)"
-                                : "Present + overtime"
+                              isLocked
+                                ? "Staff can only change today or yesterday"
+                                : "Tap to change"
                             }
                           >
-                            Ot
+                            {mark}
                           </button>
-                          <button
-                            type="button"
-                            className={`toggle-btn ${rec?.status === "half" ? "active-half" : ""}`}
-                            onClick={() => {
-                              if (!isFuture && !isSaving) void toggleHalf(day);
-                            }}
-                            disabled={isFuture || isSaving || rec?.status === "absent"}
-                            title="Half day"
-                          >
-                            H
-                          </button>
-                        </div>
+                        ) : editable ? (
+                          <div className="toggle-group attendance-day__toggles" role="group" aria-label="Attendance">
+                            <button
+                              type="button"
+                              className={`toggle-btn ${rec?.status === "present" && !hasOt ? "active-present" : ""}`}
+                              onClick={() => {
+                                void pick(() =>
+                                  saveAttendance(day, "present", null)
+                                );
+                              }}
+                              disabled={isSaving}
+                              title="Present"
+                            >
+                              P
+                            </button>
+                            <button
+                              type="button"
+                              className={`toggle-btn ${rec?.status === "absent" ? "active-absent" : ""}`}
+                              onClick={() => {
+                                void pick(() => saveAttendance(day, "absent", null));
+                              }}
+                              disabled={isSaving}
+                              title="Absent"
+                            >
+                              A
+                            </button>
+                            <button
+                              type="button"
+                              className={`toggle-btn ${hasOt ? "active-ot" : ""}`}
+                              onClick={() => {
+                                void pick(async () => {
+                                  await saveAttendance(day, "present", 1);
+                                });
+                              }}
+                              disabled={isSaving}
+                              title="Present + overtime"
+                            >
+                              Ot
+                            </button>
+                            <button
+                              type="button"
+                              className={`toggle-btn ${rec?.status === "half" ? "active-half" : ""}`}
+                              onClick={() => {
+                                void pick(() => saveAttendance(day, "half", null));
+                              }}
+                              disabled={isSaving}
+                              title="Half day"
+                            >
+                              H
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}

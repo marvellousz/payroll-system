@@ -34,6 +34,21 @@ function parseAttendanceDate(date: string): Date | null {
   return new Date(Date.UTC(y, mo - 1, d));
 }
 
+function calendarYmd(timeZone: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function addCalendarDays(ymd: string, delta: number) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + delta));
+  return dt.toISOString().slice(0, 10);
+}
+
 // GET /api/employees/:id/attendance?month=&year=
 export async function GET(
   request: Request,
@@ -117,6 +132,19 @@ export async function POST(
   const dateObj = parseAttendanceDate(date);
   if (!dateObj) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+  }
+
+  // Staff may only change today and yesterday; admin can edit any day
+  if (profile.role !== "admin") {
+    const ymd = String(date).trim();
+    const today = calendarYmd("Asia/Kolkata");
+    const yesterday = addCalendarDays(today, -1);
+    if (ymd !== today && ymd !== yesterday) {
+      return NextResponse.json(
+        { error: "Staff can only mark attendance for today or yesterday" },
+        { status: 403 }
+      );
+    }
   }
 
   const existing = await prisma.attendanceRecord.findUnique({
