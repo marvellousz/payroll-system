@@ -12,6 +12,7 @@ interface Employee {
   id: string;
   name: string;
   monthly_salary: string;
+  overtime_rate?: string;
   paid_leave_days: number;
   outlet: { name: string; overtime_rate: string; overtime_unit: string };
   created_at: string;
@@ -153,9 +154,9 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
             <div className="text-xl font-bold mt-1">{employee.paid_leave_days} days</div>
           </div>
           <div>
-            <div className="text-muted text-xs uppercase font-semibold">Outlet OT Rate</div>
+            <div className="text-muted text-xs uppercase font-semibold">OT Rate / Day</div>
             <div className="text-xl font-bold mt-1">
-              {formatINR(Number(employee.outlet.overtime_rate))} / OT day
+              {formatINR(Number(employee.overtime_rate ?? employee.outlet.overtime_rate))}
             </div>
           </div>
         </div>

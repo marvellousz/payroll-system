@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import Dropdown from "@/components/Dropdown";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
-import { swrKeys } from "@/lib/swr-config";
+import { invalidatePayrollCaches, swrKeys } from "@/lib/swr-config";
 
 interface Adjustment {
   id: string;
@@ -18,10 +18,21 @@ interface Adjustment {
   creator?: { username: string };
 }
 
+interface OtAdjustment {
+  id: string;
+  details: string;
+  apply_month: number | null;
+  apply_year: number | null;
+  created_at: string;
+  undone_at: string | null;
+  creator?: { username: string };
+}
+
 interface OutletEmp {
   id: string;
   name: string;
   monthly_salary: string;
+  overtime_rate?: string | number;
 }
 
 interface Outlet {
@@ -32,13 +43,25 @@ interface Outlet {
   _count?: { employees?: number };
 }
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 export default function SettingsClient() {
   const { data: adjustments, mutate } = useSWR<Adjustment[]>(swrKeys.salaryAdjustments());
-  const { data: outlets, mutate: mutateOutlets } = useSWR<Outlet[]>(swrKeys.outlets());
-  const { refresh: refreshOutlets } = useOutlets();
+  const { data: otAdjustments, mutate: mutateOtAdj } = useSWR<OtAdjustment[]>(
+    swrKeys.overtimeAdjustments()
+  );
+  const { data: outlets } = useSWR<Outlet[]>(swrKeys.outlets());
+  const { selectedOutletId, selectedOutlet } = useOutlets();
   const [outletId, setOutletId] = useState("");
+  const otOutletId = selectedOutletId;
   const { data: employees } = useSWR<OutletEmp[]>(
     outletId ? swrKeys.employees(outletId) : null
+  );
+  const { data: otEmployees, mutate: mutateOtEmployees } = useSWR<OutletEmp[]>(
+    otOutletId ? swrKeys.employees(otOutletId) : null
   );
 
   const [scope, setScope] = useState<"all" | "employee">("all");
@@ -47,11 +70,29 @@ export default function SettingsClient() {
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [undoing, setUndoing] = useState<string | null>(null);
+  const [otUndoing, setOtUndoing] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
   const [otDrafts, setOtDrafts] = useState<Record<string, string>>({});
-  const [otSaving, setOtSaving] = useState<string | null>(null);
+  const [otSaving, setOtSaving] = useState(false);
   const [otMessage, setOtMessage] = useState("");
+  const [otError, setOtError] = useState("");
+  const [applyCurrentMonth, setApplyCurrentMonth] = useState(false);
+
+  const now = new Date();
+  const currentMonthLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+
+  useEffect(() => {
+    const preferred = selectedOutletId || outlets?.[0]?.id || "";
+    if (!outletId && preferred) setOutletId(preferred);
+  }, [selectedOutletId, outlets, outletId]);
+
+  useEffect(() => {
+    setOtDrafts({});
+    setOtMessage("");
+    setOtError("");
+  }, [otOutletId]);
 
   const outletOptions = useMemo(
     () => (Array.isArray(outlets) ? outlets : []).map((o) => ({ value: o.id, label: o.name })),
@@ -65,6 +106,8 @@ export default function SettingsClient() {
       })),
     [employees]
   );
+
+  const lastOtChange = otAdjustments?.[0] ?? null;
 
   async function handleApply(e: React.FormEvent) {
     e.preventDefault();
@@ -119,40 +162,90 @@ export default function SettingsClient() {
     }
   }
 
-  function otRateValue(outlet: Outlet) {
-    return otDrafts[outlet.id] ?? String(outlet.overtime_rate ?? "0");
+  function otDraftValue(emp: OutletEmp) {
+    return otDrafts[emp.id] ?? String(emp.overtime_rate ?? "0");
   }
 
-  async function saveOtRate(outlet: Outlet) {
-    const raw = otRateValue(outlet);
-    const rate = Number(raw);
-    if (!Number.isFinite(rate) || rate < 0) {
-      setOtMessage("Enter a valid OT rate.");
+  function currentOt(emp: OutletEmp) {
+    return Number(emp.overtime_rate ?? 0);
+  }
+
+  async function saveAllOtRates() {
+    if (!otOutletId || !otEmployees?.length) return;
+    setOtError("");
+    setOtMessage("");
+
+    const rates: Array<{ employee_id: string; overtime_rate: number }> = [];
+    for (const emp of otEmployees) {
+      const rate = Number(otDraftValue(emp));
+      if (!Number.isFinite(rate) || rate < 0) {
+        setOtError(`Invalid rate for ${emp.name}`);
+        return;
+      }
+      rates.push({ employee_id: emp.id, overtime_rate: rate });
+    }
+
+    const changed = rates.some((r) => {
+      const emp = otEmployees.find((e) => e.id === r.employee_id);
+      return emp && currentOt(emp) !== r.overtime_rate;
+    });
+    if (!changed) {
+      setOtError("Change at least one OT rate before saving.");
       return;
     }
-    setOtSaving(outlet.id);
-    setOtMessage("");
+
+    setOtSaving(true);
     try {
-      const res = await fetch(`/api/outlets/${outlet.id}`, {
-        method: "PATCH",
+      const res = await fetch("/api/settings/overtime-rates", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ overtime_rate: rate, overtime_unit: "day" }),
+        body: JSON.stringify({
+          outlet_id: otOutletId,
+          rates,
+          apply_current_month: applyCurrentMonth,
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setOtMessage(body.error || "Failed to save OT rate");
+        setOtError(body.error || "Failed to save OT rates");
         return;
       }
-      setOtDrafts((d) => {
-        const next = { ...d };
-        delete next[outlet.id];
-        return next;
-      });
-      void mutateOutlets();
-      refreshOutlets();
-      setOtMessage(`Saved OT rate for ${outlet.name}`);
+      setOtDrafts({});
+      setApplyCurrentMonth(false);
+      void mutateOtEmployees();
+      void mutateOtAdj();
+      void invalidatePayrollCaches(otOutletId);
+      const lines = Array.isArray(body.changes)
+        ? body.changes.map((c: { name: string; from: number; to: number }) =>
+            `${c.name} ${c.from} → ${c.to}`
+          )
+        : [];
+      setOtMessage(
+        applyCurrentMonth
+          ? `Saved · applied to ${currentMonthLabel}\n${lines.join("\n")}`
+          : `Saved standing OT rates\n${lines.join("\n")}`
+      );
     } finally {
-      setOtSaving(null);
+      setOtSaving(false);
+    }
+  }
+
+  async function handleOtUndo(id: string) {
+    if (!confirm("Restore previous OT rates from this change?")) return;
+    setOtUndoing(id);
+    try {
+      const res = await fetch(`/api/settings/overtime-rates/${id}/undo`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        alert(body.error || "Undo failed");
+        return;
+      }
+      void mutateOtAdj();
+      void mutateOtEmployees();
+      void invalidatePayrollCaches(otOutletId);
+      setOtMessage("OT rates restored from last change.");
+    } finally {
+      setOtUndoing(null);
     }
   }
 
@@ -161,46 +254,135 @@ export default function SettingsClient() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">Outlet OT rates and salary adjustments</p>
+          <p className="page-subtitle">Employee OT rates and salary adjustments</p>
         </div>
       </div>
 
       <div className="card mb-6">
-        <h2 className="text-lg font-bold mb-2">Overtime rate (per outlet)</h2>
+        <h2 className="text-lg font-bold mb-1">Overtime rate</h2>
         <p className="text-secondary text-sm mb-4">
-          Each calendar day marked <strong>Ot</strong> adds this amount. Different outlets can have different rates.
+          {selectedOutlet
+            ? `Per employee · ${selectedOutlet.name}`
+            : "Select an outlet in the header"}
         </p>
-        {otMessage && <div className="alert alert-success mb-4">{otMessage}</div>}
-        {!outlets?.length ? (
-          <p className="text-muted text-sm">No outlets yet. Create one under Outlets.</p>
+
+        {otError && <div className="alert alert-danger mb-4">{otError}</div>}
+        {otMessage && (
+          <div className="alert alert-success mb-4" style={{ whiteSpace: "pre-line" }}>
+            {otMessage}
+          </div>
+        )}
+
+        {!otOutletId ? (
+          <p className="text-muted text-sm">Select an outlet from the top bar.</p>
+        ) : !otEmployees?.length ? (
+          <p className="text-muted text-sm">No employees in this outlet.</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", maxWidth: 560 }}>
-            {(outlets ?? []).map((outlet) => (
-              <div key={outlet.id} className="flex gap-3 flex-wrap items-end">
-                <div className="form-group" style={{ flex: "1 1 160px", margin: 0 }}>
-                  <label className="form-label">{outlet.name}</label>
+          <>
+            <div
+              className="mb-5"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.65rem",
+                maxWidth: 360,
+              }}
+            >
+              {otEmployees.map((emp) => (
+                <div
+                  key={emp.id}
+                  className="flex items-center gap-3"
+                  style={{ minHeight: 44 }}
+                >
+                  <span
+                    className="font-bold truncate"
+                    style={{ flex: "1 1 auto", minWidth: 0 }}
+                    title={emp.name}
+                  >
+                    {emp.name}
+                  </span>
                   <input
                     type="number"
                     min={0}
-                    step={10}
+                    step={50}
                     className="form-input"
-                    value={otRateValue(outlet)}
+                    value={otDraftValue(emp)}
                     onChange={(e) =>
-                      setOtDrafts((d) => ({ ...d, [outlet.id]: e.target.value }))
+                      setOtDrafts((d) => ({ ...d, [emp.id]: e.target.value }))
                     }
-                    aria-label={`OT rate for ${outlet.name}`}
+                    aria-label={`OT rate for ${emp.name}`}
+                    style={{
+                      width: 110,
+                      minHeight: 40,
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                      textAlign: "right",
+                    }}
                   />
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={otSaving === outlet.id}
-                  onClick={() => void saveOtRate(outlet)}
-                >
-                  {otSaving === outlet.id ? "Saving…" : "Save"}
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.85rem",
+                maxWidth: 360,
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={otSaving}
+                onClick={() => void saveAllOtRates()}
+                style={{ alignSelf: "flex-start" }}
+              >
+                {otSaving ? (
+                  <>
+                    <span className="spinner" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save"
+                )}
+              </button>
+
+              <label
+                className="flex items-center gap-2 font-semibold text-sm"
+                style={{ cursor: "pointer" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={applyCurrentMonth}
+                  onChange={(e) => setApplyCurrentMonth(e.target.checked)}
+                />
+                Apply new OT rates for the current month
+              </label>
+            </div>
+          </>
+        )}
+
+        {lastOtChange && !lastOtChange.undone_at && (
+          <div className="mt-6 flex items-center gap-3 flex-wrap" style={{ maxWidth: 360 }}>
+            <span className="text-sm text-secondary">
+              Last change{" "}
+              {new Date(lastOtChange.created_at).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+              })}
+              {lastOtChange.creator?.username
+                ? ` · ${lastOtChange.creator.username}`
+                : ""}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={otUndoing === lastOtChange.id}
+              onClick={() => void handleOtUndo(lastOtChange.id)}
+            >
+              {otUndoing === lastOtChange.id ? "Undoing…" : "Undo"}
+            </button>
           </div>
         )}
       </div>
@@ -275,7 +457,7 @@ export default function SettingsClient() {
         </form>
       </div>
 
-      <h2 className="text-lg font-bold mb-4">Adjustment history</h2>
+      <h2 className="text-lg font-bold mb-4">Salary adjustment history</h2>
       {!adjustments?.length ? (
         <div className="card text-center text-muted" style={{ padding: "2rem" }}>
           No salary adjustments yet.

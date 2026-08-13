@@ -115,7 +115,7 @@ export default function OutletsClient() {
         />
       </div>
       <div className="form-group">
-        <label className="form-label" htmlFor="ot-rate">OT rate per day (₹)</label>
+        <label className="form-label" htmlFor="ot-rate">Default OT rate for new employees (₹/day)</label>
         <input
           id="ot-rate"
           type="number"
@@ -127,7 +127,7 @@ export default function OutletsClient() {
           required
         />
         <span className="form-hint">
-          Per-outlet overtime pay. Each calendar day marked Ot adds this amount (e.g. ₹1000 × 2 OT days = ₹2000).
+          Copied onto new employees. Change individual rates anytime in Settings → Overtime rates per day.
         </span>
       </div>
       <div className="modal-footer" style={{ border: "none", padding: 0, margin: 0, marginTop: "0.5rem" }}>
@@ -185,7 +185,7 @@ export default function OutletsClient() {
 
               <div style={{ background: "var(--color-surface-2)", borderRadius: "var(--radius-md)", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-secondary">OT rate / day:</span>
+                  <span className="text-secondary">Default OT / day:</span>
                   <span className="font-semibold">{formatINR(Number(outlet.overtime_rate))}</span>
                 </div>
               </div>

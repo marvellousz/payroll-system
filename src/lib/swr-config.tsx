@@ -57,6 +57,7 @@ export const swrKeys = {
     `/api/outlets/${outletId}/payroll?month=${month}&year=${year}${forPage === "payroll" ? "&for=payroll" : ""}`,
   me: () => "/api/me",
   salaryAdjustments: () => "/api/settings/salary-adjustments",
+  overtimeAdjustments: () => "/api/settings/overtime-rates",
   employeeOverview: (employeeId: string, month: number, year: number) =>
     `/api/employees/${employeeId}/overview?month=${month}&year=${year}`,
   attendance: (employeeId: string, month: number, year: number) =>

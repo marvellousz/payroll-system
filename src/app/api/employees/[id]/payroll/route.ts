@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthProfile, logAudit } from "@/lib/audit";
-import { prisma } from "@/lib/prisma";
-import { computeEmployeePayroll } from "@/lib/payroll-server";
+import { computeEmployeePayroll, saveEmployeePayrollSummary } from "@/lib/payroll-server";
 
 // GET /api/employees/:id/payroll?month=&year=
 export async function GET(
@@ -38,54 +37,16 @@ export async function POST(
 
   const { id } = await params;
   const body = await request.json();
-  const { month, year } = body;
+  const { month, year, force_new_ot_rate } = body;
 
   if (!month || !year) {
     return NextResponse.json({ error: "month and year are required" }, { status: 400 });
   }
 
-  const computed = await computeEmployeePayroll(id, profile.org_id, month, year);
-  if (!computed) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  const p = computed.payroll;
-
-  const summary = await prisma.payrollSummary.upsert({
-    where: { employee_id_month_year: { employee_id: id, month, year } },
-    create: {
-      employee_id: id,
-      month,
-      year,
-      days_present: p.days_present,
-      days_absent: p.days_absent,
-      days_half: p.days_half,
-      paid_leave_days: p.paid_leave_days,
-      base_pay: p.base_pay,
-      overtime_total_units: p.overtime_total_units,
-      overtime_rate_snapshot: p.overtime_rate_snapshot,
-      overtime_pay: p.overtime_pay,
-      total_pay: p.total_pay,
-      salary_given: p.salary_given,
-      previous_balance: p.previous_balance,
-      monthly_balance: p.monthly_balance,
-      closing_balance: p.closing_balance,
-    },
-    update: {
-      days_present: p.days_present,
-      days_absent: p.days_absent,
-      days_half: p.days_half,
-      paid_leave_days: p.paid_leave_days,
-      base_pay: p.base_pay,
-      overtime_total_units: p.overtime_total_units,
-      overtime_rate_snapshot: p.overtime_rate_snapshot,
-      overtime_pay: p.overtime_pay,
-      total_pay: p.total_pay,
-      salary_given: p.salary_given,
-      previous_balance: p.previous_balance,
-      monthly_balance: p.monthly_balance,
-      closing_balance: p.closing_balance,
-      generated_at: new Date(),
-    },
+  const summary = await saveEmployeePayrollSummary(id, profile.org_id, month, year, {
+    forceNewOtRate: Boolean(force_new_ot_rate),
   });
+  if (!summary) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await logAudit({
     org_id: profile.org_id,
@@ -94,7 +55,12 @@ export async function POST(
     entity_id: summary.id,
     field_changed: "generated",
     old_value: null,
-    new_value: JSON.stringify({ month, year, total_pay: p.total_pay, closing_balance: p.closing_balance }),
+    new_value: JSON.stringify({
+      month,
+      year,
+      total_pay: summary.total_pay,
+      closing_balance: summary.closing_balance,
+    }),
   });
 
   return NextResponse.json(summary);

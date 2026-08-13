@@ -23,7 +23,7 @@ export interface PayrollResult {
  *   daily_rate   = monthly_salary / 30
  *   payable_days = 30 - days_absent - (0.5 × days_half) + paid_leave_days
  *   base_pay     = daily_rate * payable_days
- *   overtime_pay = (OT days) × overtime_rate   // rate is per outlet, set in outlet settings
+ *   overtime_pay = (OT days) × overtime_rate   // rate is per employee (Settings)
  *   total_pay    = base_pay + overtime_pay
  *
  * Always uses 30 as the divisor regardless of actual calendar month length.
@@ -31,6 +31,7 @@ export interface PayrollResult {
  *
  * OT on the calendar is on/off only (no amount typed on the day).
  * overtime_total_units = number of days marked OT.
+ * overtime_rate comes from Employee.overtime_rate (Settings).
  */
 export function calculatePayroll(input: PayrollInput): PayrollResult {
   const salary = Number(input.monthly_salary);

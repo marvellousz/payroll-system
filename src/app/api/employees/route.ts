@@ -31,6 +31,10 @@ export async function POST(request: Request) {
       outlet_id,
       name: name.trim(),
       monthly_salary,
+      overtime_rate:
+        body.overtime_rate !== undefined
+          ? Number(body.overtime_rate)
+          : Number(outlet.overtime_rate) || 0,
       paid_leave_days: paid_leave_days ?? 0,
       salary_hidden: profile.role === "admin" ? Boolean(salary_hidden) : false,
     },

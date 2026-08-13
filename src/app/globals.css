@@ -1360,9 +1360,11 @@ h5 { font-size: 1rem; font-weight: 600; }
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 0.25rem;
+  overscroll-behavior-x: contain;
 }
 .attendance-scroll__inner {
-  min-width: 560px;
+  min-width: 0;
+  width: 100%;
 }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────────── */
@@ -1442,6 +1444,67 @@ h5 { font-size: 1rem; font-weight: 600; }
   .toggle-group .toggle-btn {
     min-height: 40px;
   }
+  /* Don't force tall buttons inside calendar cells */
+  .attendance-day__toggles .toggle-btn {
+    min-height: 30px;
+  }
+
+  /* Attendance calendar — fit phone width, show P / A / Ot / H */
+  .attendance-board {
+    padding: 1rem 0.65rem 0.85rem;
+    margin-inline: -0.15rem;
+  }
+  .attendance-scroll {
+    overflow-x: visible;
+  }
+  .attendance-scroll__inner {
+    min-width: 0;
+    width: 100%;
+  }
+  .attendance-weekday {
+    font-size: 0.58rem;
+    padding: 0.4rem 0.1rem;
+    letter-spacing: 0.04em;
+  }
+  .attendance-day,
+  .attendance-day--empty {
+    min-height: 108px;
+    padding: 0.3rem 0.2rem 0.3rem;
+    gap: 0.25rem;
+  }
+  .attendance-day__date {
+    font-size: 0.7rem;
+  }
+  .attendance-day__toggles {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    width: 100%;
+    flex-wrap: unset !important;
+    overflow: hidden;
+  }
+  .attendance-day__toggles .toggle-btn {
+    flex: unset;
+    min-width: 0;
+    min-height: 30px;
+    height: 30px;
+    font-size: 0.6rem;
+    padding: 0;
+    border-radius: 0;
+    border-left: none !important;
+  }
+  .attendance-day__toggles .toggle-btn:nth-child(1),
+  .attendance-day__toggles .toggle-btn:nth-child(2) {
+    border-bottom: 1px solid var(--att-line);
+  }
+  .attendance-day__toggles .toggle-btn:nth-child(odd) {
+    border-right: 1px solid var(--att-line);
+  }
+  .attendance-board__legend {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.65rem 0.85rem;
+  }
 
   .modal {
     padding: 1.25rem;
@@ -1467,24 +1530,36 @@ h5 { font-size: 1rem; font-weight: 600; }
 }
 
 @media (max-width: 480px) {
-  .page-content { padding: 1rem 0.75rem; }
+  .page-content { padding: 1rem 0.65rem; }
   .card { padding: 1rem; }
   .card-flat-emerald,
   .card-flat-muted,
   .card-flat-blue,
   .card-flat-amber { padding: 1rem; }
 
-  .attendance-scroll__inner { min-width: 560px; }
+  .attendance-scroll__inner {
+    min-width: 0;
+    width: 100%;
+  }
   .attendance-board {
-    padding: 1.1rem 0.85rem 1rem;
+    padding: 0.85rem 0.45rem 0.75rem;
   }
   .attendance-board__title {
     font-size: 1.85rem;
   }
   .attendance-day,
   .attendance-day--empty {
-    min-height: 100px;
-    padding: 0.35rem 0.3rem 0.4rem;
+    min-height: 102px;
+    padding: 0.25rem 0.15rem 0.25rem;
+  }
+  .attendance-day__toggles .toggle-btn {
+    min-height: 28px;
+    height: 28px;
+    font-size: 0.55rem;
+  }
+  .attendance-weekday {
+    font-size: 0.52rem;
+    padding: 0.35rem 0.05rem;
   }
 
   .stat-card__value { font-size: 1.375rem; }

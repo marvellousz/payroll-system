@@ -66,6 +66,7 @@ export async function PATCH(
     data: {
       ...(body.name !== undefined && { name: body.name.trim() }),
       ...(body.monthly_salary !== undefined && { monthly_salary: body.monthly_salary }),
+      ...(body.overtime_rate !== undefined && { overtime_rate: Number(body.overtime_rate) }),
       ...(body.paid_leave_days !== undefined && { paid_leave_days: Number(body.paid_leave_days) }),
       ...(body.salary_hidden !== undefined && { salary_hidden: Boolean(body.salary_hidden) }),
     },
@@ -77,6 +78,11 @@ export async function PATCH(
       key: "monthly_salary",
       old: String(existing.monthly_salary),
       new_: body.monthly_salary !== undefined ? String(body.monthly_salary) : undefined,
+    },
+    {
+      key: "overtime_rate",
+      old: String(existing.overtime_rate),
+      new_: body.overtime_rate !== undefined ? String(body.overtime_rate) : undefined,
     },
     {
       key: "paid_leave_days",
@@ -100,7 +106,7 @@ export async function PATCH(
         field_changed: key,
         old_value: old,
         new_value: String(new_),
-        highlighted: key === "monthly_salary",
+        highlighted: key === "monthly_salary" || key === "overtime_rate",
       });
     }
   }

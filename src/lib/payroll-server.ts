@@ -23,11 +23,12 @@ export type PayrollBreakdown = {
   generated_at: Date;
 };
 
-type EmployeeWithOutlet = {
+type EmployeeWithOt = {
   id: string;
   monthly_salary: { toString(): string };
   paid_leave_days: number;
   salary_hidden?: boolean;
+  overtime_rate?: { toString(): string } | null;
   outlet: { overtime_rate: { toString(): string } };
 };
 
@@ -47,6 +48,7 @@ type SummaryRow = {
   employee_id: string;
   closing_balance: unknown;
   generated_at: Date;
+  overtime_rate_snapshot?: unknown;
 };
 
 function prevMonthYear(month: number, year: number) {
@@ -75,28 +77,39 @@ export function netSalaryGiven(payments: PaymentRow[]) {
   }, 0);
 }
 
+/** Per-employee OT rate (₹/day); falls back to outlet rate if unset. */
+export function resolveOvertimeRate(employee: EmployeeWithOt): number {
+  if (employee.overtime_rate != null) {
+    const n = Number(employee.overtime_rate);
+    if (Number.isFinite(n)) return n;
+  }
+  return Number(employee.outlet.overtime_rate) || 0;
+}
+
 /**
  * Unmarked days (no attendance row) count as absent for the fixed 30-day month.
  * Present / half / absent only from marked records; unmarked fills the rest of 30.
+ *
+ * OT rate: employee standing rate (Settings). If a payroll summary already locked a
+ * rate for the month, reuse that snapshot unless `forceNewOtRate` is set.
  */
 export function buildPayrollBreakdown(
-  employee: EmployeeWithOutlet,
+  employee: EmployeeWithOt,
   month: number,
   year: number,
   attendance: AttendanceRow[],
   payments: PaymentRow[],
   prevSummary: SummaryRow | undefined,
-  existingSummary: SummaryRow | undefined
+  existingSummary: SummaryRow | undefined,
+  options?: { forceNewOtRate?: boolean }
 ): PayrollBreakdown {
   const days_present = attendance.filter((r) => r.status === "present").length;
   const days_half = attendance.filter((r) => r.status === "half").length;
   const markedAbsent = attendance.filter((r) => r.status === "absent").length;
   const markedDays = days_present + days_half + markedAbsent;
   const days_unmarked = Math.max(0, 30 - markedDays);
-  // Unmarked count as absent for the formula
   const days_absent = markedAbsent + days_unmarked;
 
-  // OT only on Present days; pay = OT days × outlet rate
   const overtime_total_units = attendance.filter(
     (r) =>
       r.status === "present" &&
@@ -106,13 +119,22 @@ export function buildPayrollBreakdown(
   const salary_given = netSalaryGiven(payments);
   const previous_balance = prevSummary ? Number(prevSummary.closing_balance) : 0;
 
+  const currentRate = resolveOvertimeRate(employee);
+  const locked =
+    !options?.forceNewOtRate &&
+    existingSummary?.overtime_rate_snapshot != null &&
+    Number(existingSummary.overtime_rate_snapshot) >= 0
+      ? Number(existingSummary.overtime_rate_snapshot)
+      : null;
+  const overtime_rate = locked != null && Number.isFinite(locked) ? locked : currentRate;
+
   const { base_pay, overtime_pay, total_pay, payable_days } = calculatePayroll({
     monthly_salary: employee.monthly_salary,
     paid_leave_days: employee.paid_leave_days,
     days_absent,
     days_half,
     overtime_total_units,
-    overtime_rate: employee.outlet.overtime_rate,
+    overtime_rate,
   });
 
   const { monthly_balance, closing_balance } = calculateBalance(
@@ -133,7 +155,7 @@ export function buildPayrollBreakdown(
     payable_days,
     base_pay,
     overtime_total_units,
-    overtime_rate_snapshot: Number(employee.outlet.overtime_rate),
+    overtime_rate_snapshot: overtime_rate,
     overtime_pay,
     total_pay,
     salary_given,
@@ -149,7 +171,7 @@ export async function computeOutletPayroll(
   orgId: string,
   month: number,
   year: number,
-  options?: { includeHidden?: boolean }
+  options?: { includeHidden?: boolean; forceNewOtRate?: boolean }
 ) {
   const { startDate, endDate } = monthRange(year, month);
   const { prevMonth, prevYear } = prevMonthYear(month, year);
@@ -172,6 +194,7 @@ export async function computeOutletPayroll(
         monthly_salary: true,
         paid_leave_days: true,
         salary_hidden: true,
+        overtime_rate: true,
       },
       orderBy: { name: "asc" },
     }),
@@ -196,7 +219,12 @@ export async function computeOutletPayroll(
     }),
     prisma.payrollSummary.findMany({
       where: { employee_id: { in: employeeIds }, month, year },
-      select: { employee_id: true, closing_balance: true, generated_at: true },
+      select: {
+        employee_id: true,
+        closing_balance: true,
+        generated_at: true,
+        overtime_rate_snapshot: true,
+      },
     }),
     prisma.payrollSummary.findMany({
       where: { employee_id: { in: employeeIds }, month: prevMonth, year: prevYear },
@@ -219,7 +247,8 @@ export async function computeOutletPayroll(
       attendanceByEmployee.get(employee.id) ?? [],
       paymentsByEmployee.get(employee.id) ?? [],
       prevSummaryByEmployee.get(employee.id),
-      summaryByEmployee.get(employee.id)
+      summaryByEmployee.get(employee.id),
+      { forceNewOtRate: options?.forceNewOtRate }
     );
   }
 
@@ -230,7 +259,8 @@ export async function computeEmployeePayroll(
   employeeId: string,
   orgId: string,
   month: number,
-  year: number
+  year: number,
+  options?: { forceNewOtRate?: boolean }
 ) {
   const employee = await prisma.employee.findFirst({
     where: { id: employeeId, outlet: { org_id: orgId } },
@@ -254,7 +284,12 @@ export async function computeEmployeePayroll(
     }),
     prisma.payrollSummary.findUnique({
       where: { employee_id_month_year: { employee_id: employeeId, month, year } },
-      select: { employee_id: true, closing_balance: true, generated_at: true },
+      select: {
+        employee_id: true,
+        closing_balance: true,
+        generated_at: true,
+        overtime_rate_snapshot: true,
+      },
     }),
     prisma.payrollSummary.findUnique({
       where: {
@@ -277,9 +312,61 @@ export async function computeEmployeePayroll(
       attendance,
       payments,
       prevSummary ?? undefined,
-      existing ?? undefined
+      existing ?? undefined,
+      options
     ),
   };
+}
+
+/** Upsert payroll summary for an employee/month (used after OT rate change). */
+export async function saveEmployeePayrollSummary(
+  employeeId: string,
+  orgId: string,
+  month: number,
+  year: number,
+  options?: { forceNewOtRate?: boolean }
+) {
+  const computed = await computeEmployeePayroll(employeeId, orgId, month, year, options);
+  if (!computed) return null;
+  const p = computed.payroll;
+
+  return prisma.payrollSummary.upsert({
+    where: { employee_id_month_year: { employee_id: employeeId, month, year } },
+    create: {
+      employee_id: employeeId,
+      month,
+      year,
+      days_present: p.days_present,
+      days_absent: p.days_absent,
+      days_half: p.days_half,
+      paid_leave_days: p.paid_leave_days,
+      base_pay: p.base_pay,
+      overtime_total_units: p.overtime_total_units,
+      overtime_rate_snapshot: p.overtime_rate_snapshot,
+      overtime_pay: p.overtime_pay,
+      total_pay: p.total_pay,
+      salary_given: p.salary_given,
+      previous_balance: p.previous_balance,
+      monthly_balance: p.monthly_balance,
+      closing_balance: p.closing_balance,
+    },
+    update: {
+      days_present: p.days_present,
+      days_absent: p.days_absent,
+      days_half: p.days_half,
+      paid_leave_days: p.paid_leave_days,
+      base_pay: p.base_pay,
+      overtime_total_units: p.overtime_total_units,
+      overtime_rate_snapshot: p.overtime_rate_snapshot,
+      overtime_pay: p.overtime_pay,
+      total_pay: p.total_pay,
+      salary_given: p.salary_given,
+      previous_balance: p.previous_balance,
+      monthly_balance: p.monthly_balance,
+      closing_balance: p.closing_balance,
+      generated_at: new Date(),
+    },
+  });
 }
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string) {

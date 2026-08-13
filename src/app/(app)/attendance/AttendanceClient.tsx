@@ -135,9 +135,11 @@ export default function AttendanceClient() {
 
   async function toggleOt(day: number) {
     const rec = records[day];
-    // OT only allowed on Present days
-    if (rec?.status !== "present") return;
-    const hasOt = rec.overtime_units != null && Number(rec.overtime_units) > 0;
+    const hasOt =
+      rec?.status === "present" &&
+      rec.overtime_units != null &&
+      Number(rec.overtime_units) > 0;
+    // Tap Ot alone = Present + OT; tap again clears OT (stays Present)
     await saveAttendance(day, "present", hasOt ? null : 1);
   }
 
@@ -309,17 +311,17 @@ export default function AttendanceClient() {
                           </button>
                           <button
                             type="button"
-                            className={`toggle-btn ${rec?.overtime_units != null && Number(rec.overtime_units) > 0 ? "active-ot" : ""}`}
+                            className={`toggle-btn ${rec?.overtime_units != null && Number(rec.overtime_units) > 0 && rec?.status === "present" ? "active-ot" : ""}`}
                             onClick={() => {
                               if (!isFuture && !isSaving) void toggleOt(day);
                             }}
-                            disabled={isFuture || isSaving || rec?.status !== "present"}
+                            disabled={isFuture || isSaving}
                             title={
-                              rec?.status !== "present"
-                                ? "Mark Present first to set overtime"
-                                : rec?.overtime_units != null && Number(rec.overtime_units) > 0
-                                  ? "Overtime on (tap to clear)"
-                                  : "Mark overtime for this day"
+                              rec?.status === "present" &&
+                              rec?.overtime_units != null &&
+                              Number(rec.overtime_units) > 0
+                                ? "Overtime on (tap to clear)"
+                                : "Present + overtime"
                             }
                           >
                             Ot
@@ -358,7 +360,7 @@ export default function AttendanceClient() {
               </span>
               <span className="flex items-center gap-2 text-xs font-bold">
                 <span className="attendance-swatch" style={{ background: "#7A9EBF", borderColor: "#7A9EBF" }} />
-                Ot = overtime (only with Present)
+                Ot = Present + overtime
               </span>
               <span className="flex items-center gap-2 text-xs font-bold">
                 <span className="attendance-swatch attendance-swatch--half" />
