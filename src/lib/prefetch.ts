@@ -48,6 +48,7 @@ export function prefetchRouteData(href: string, outletId: string) {
     void preload(swrKeys.users(), fetcher);
   } else if (href === "/audit") {
     const params = new URLSearchParams();
+    params.set("outlet_ids", outletId);
     params.set("page", "1");
     params.set("limit", "25");
     void preload(swrKeys.auditLogs(params), fetcher);

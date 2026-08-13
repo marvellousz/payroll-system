@@ -22,7 +22,7 @@ export async function GET(
 
   // Staff: never receive salary / OT rate figures
   const safe = isAdmin(profile)
-    ? employees
+    ? employees.map((e) => ({ ...e, salary_masked: false }))
     : employees.map((e) => ({
         ...e,
         monthly_salary: 0 as unknown as typeof e.monthly_salary,

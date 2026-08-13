@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthProfile, logAudit } from "@/lib/audit";
+import { canViewMoney } from "@/lib/money-visibility";
 import { netSalaryGiven } from "@/lib/payroll-server";
 
 async function verifyEmployee(employeeId: string, orgId: string) {
@@ -38,6 +39,10 @@ export async function GET(
     orderBy: { paid_at: "desc" },
     include: { created_by_profile: { select: { username: true } } },
   });
+
+  if (!canViewMoney(profile)) {
+    return NextResponse.json(payments.map((p) => ({ ...p, amount: "0" })));
+  }
 
   return NextResponse.json(payments);
 }

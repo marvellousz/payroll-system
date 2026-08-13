@@ -11,7 +11,12 @@ export default async function AppLayout({
   if (!profile) redirect("/login");
 
   return (
-    <AppShell role={profile.role} username={profile.username}>
+    <AppShell
+      role={profile.role}
+      username={profile.username}
+      outletName={profile.outlet?.name ?? null}
+      outletId={profile.outlet_id}
+    >
       {children}
     </AppShell>
   );

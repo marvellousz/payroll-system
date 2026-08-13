@@ -15,10 +15,12 @@ interface Employee {
   monthly_salary: string;
   paid_leave_days: number;
   salary_hidden?: boolean;
+  salary_masked?: boolean;
 }
 
 interface Me {
   role: string;
+  outlet?: { id: string; name: string } | null;
 }
 
 function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -33,13 +35,14 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 }
 
 export default function EmployeesClient() {
-  const { selectedOutletId } = useOutlets();
+  const { selectedOutletId, selectedOutlet } = useOutlets();
   const { data: me } = useSWR<Me>(swrKeys.me());
   const isAdmin = me?.role === "admin";
   const { data, isLoading, mutate } = useSWR<Employee[]>(
     selectedOutletId ? swrKeys.employees(selectedOutletId) : null
   );
   const employees = Array.isArray(data) ? data : [];
+  const outletName = selectedOutlet?.name ?? me?.outlet?.name;
   const [showAdd, setShowAdd] = useState(false);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState({
@@ -112,7 +115,12 @@ export default function EmployeesClient() {
 
   async function handleDelete(emp: Employee) {
     if (!confirm(`Delete employee "${emp.name}"? This action cannot be undone.`)) return;
-    await fetch(`/api/employees/${emp.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/employees/${emp.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error || "Failed to delete employee.");
+      return;
+    }
     void mutate();
   }
 
@@ -157,12 +165,10 @@ export default function EmployeesClient() {
           <h1 className="page-title">Employees</h1>
           <p className="page-subtitle">Manage outlet staff, base salaries, and paid leave allowances</p>
         </div>
-        {isAdmin && (
-          <button className="btn btn-primary" onClick={openAdd}>
-            <Plus size={18} strokeWidth={2.5} />
-            Add Employee
-          </button>
-        )}
+        <button className="btn btn-primary" onClick={openAdd}>
+          <Plus size={18} strokeWidth={2.5} />
+          Add Employee
+        </button>
       </div>
 
       {isLoading && !data ? (
@@ -174,7 +180,9 @@ export default function EmployeesClient() {
           <div className="empty-state__icon">
             <Users size={32} strokeWidth={2} />
           </div>
-          <p className="empty-state__title">No employees in this outlet</p>
+          <p className="empty-state__title">
+            {outletName ? `No employees in ${outletName}` : "No employees in this outlet"}
+          </p>
           <p className="empty-state__desc">Add your first employee using the Add Employee button above.</p>
         </div>
       ) : (
@@ -218,9 +226,7 @@ export default function EmployeesClient() {
                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(emp)}>Edit</button>
                       )}
                       <Link href={`/attendance?employee=${emp.id}`} className="btn btn-outline btn-sm" prefetch>Attendance</Link>
-                      {isAdmin && (
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(emp)}>Delete</button>
-                      )}
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(emp)}>Delete</button>
                     </div>
                   </td>
                 </tr>

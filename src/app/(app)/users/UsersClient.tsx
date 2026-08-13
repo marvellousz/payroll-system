@@ -34,6 +34,7 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 
 export default function UsersClient() {
   const { data, isLoading, mutate } = useSWR<UserProfile[]>(swrKeys.users());
+  const { data: me } = useSWR<{ id: string }>(swrKeys.me());
   const { data: outletsData } = useSWR<OutletOption[]>(swrKeys.outlets());
   const users = Array.isArray(data) ? data : [];
   const outlets = Array.isArray(outletsData) ? outletsData : [];
@@ -41,6 +42,10 @@ export default function UsersClient() {
   const [moveUser, setMoveUser] = useState<UserProfile | null>(null);
   const [moveOutletId, setMoveOutletId] = useState("");
   const [moving, setMoving] = useState(false);
+  const [passwordUser, setPasswordUser] = useState<UserProfile | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -51,6 +56,7 @@ export default function UsersClient() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [moveError, setMoveError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   function openAdd() {
     setFormData({
@@ -68,6 +74,43 @@ export default function UsersClient() {
     setMoveUser(user);
     setMoveOutletId(user.outlet_id ?? outlets[0]?.id ?? "");
     setMoveError("");
+  }
+
+  function openSetPassword(user: UserProfile) {
+    setPasswordUser(user);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError("");
+  }
+
+  async function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!passwordUser) return;
+    setPasswordError("");
+    if (newPassword.length < 8) {
+      setPasswordError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const res = await fetch(`/api/users/${passwordUser.id}/password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPasswordError(data.error || "Failed to set password.");
+        return;
+      }
+      setPasswordUser(null);
+    } finally {
+      setPasswordSaving(false);
+    }
   }
 
   async function handleMoveUser(e: React.FormEvent) {
@@ -219,6 +262,11 @@ export default function UsersClient() {
                           Move outlet
                         </button>
                       )}
+                      {u.id !== me?.id && (
+                        <button className="btn btn-outline btn-sm" onClick={() => openSetPassword(u)}>
+                          Set password
+                        </button>
+                      )}
                       <button className="btn btn-danger btn-sm" onClick={() => handleDeleteUser(u)}>
                         Remove
                       </button>
@@ -342,6 +390,53 @@ export default function UsersClient() {
             <button type="button" className="btn btn-secondary" onClick={() => setMoveUser(null)}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={moving}>
               {moving ? <><span className="spinner" />Moving…</> : "Move"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={Boolean(passwordUser)} onClose={() => setPasswordUser(null)}>
+        <div className="modal-header">
+          <h2>Set password</h2>
+          <button className="btn btn-ghost btn-icon" onClick={() => setPasswordUser(null)} aria-label="Close">
+            <X size={18} strokeWidth={2} />
+          </button>
+        </div>
+        <form onSubmit={handleSetPassword} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          {passwordError && <div className="alert alert-danger">{passwordError}</div>}
+          <p className="text-secondary text-sm">
+            Set a new password for <strong>{passwordUser?.username}</strong>.
+          </p>
+          <div className="form-group">
+            <label className="form-label" htmlFor="set-password">New password</label>
+            <input
+              id="set-password"
+              type="password"
+              className="form-input"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              minLength={8}
+              required
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="set-password-confirm">Confirm password</label>
+            <input
+              id="set-password-confirm"
+              type="password"
+              className="form-input"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              minLength={8}
+              required
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="modal-footer" style={{ border: "none", padding: 0, margin: 0 }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setPasswordUser(null)}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={passwordSaving}>
+              {passwordSaving ? <><span className="spinner" />Saving…</> : "Set password"}
             </button>
           </div>
         </form>

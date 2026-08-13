@@ -55,6 +55,7 @@ const navItems: NavItem[] = [
     label: "Settings",
     href: "/settings",
     icon: <Settings size={20} strokeWidth={2.5} />,
+    adminOnly: true,
   },
   {
     label: "Outlets",
@@ -75,12 +76,14 @@ interface SidebarProps {
   onClose: () => void;
   role: string;
   username: string;
+  outletName?: string | null;
 }
 
-export default function Sidebar({ isOpen, onClose, role, username }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, role, username, outletName }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { selectedOutletId } = useOutlets();
+  const { selectedOutletId, selectedOutlet } = useOutlets();
+  const displayOutlet = selectedOutlet?.name ?? outletName;
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -143,7 +146,9 @@ export default function Sidebar({ isOpen, onClose, role, username }: SidebarProp
                 {username}
               </div>
               <div className="sidebar__user-role">
-                {role}
+                {role === "staff" && displayOutlet
+                  ? displayOutlet
+                  : role}
               </div>
             </div>
           </div>

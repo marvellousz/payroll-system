@@ -43,12 +43,22 @@ function writeStoredOutletId(id: string) {
   }
 }
 
-export function OutletProvider({ children }: { children: React.ReactNode }) {
+export function OutletProvider({
+  children,
+  role: roleProp,
+  outletId: outletIdProp,
+}: {
+  children: React.ReactNode;
+  role?: string;
+  outletId?: string | null;
+}) {
   const { data, isLoading, mutate } = useSWR<
     Array<{ id: string; name: string; _count?: { employees?: number } }>
   >(swrKeys.outlets());
   const { data: me } = useSWR<{ role: string; outlet_id?: string | null }>(swrKeys.me());
-  const isAdmin = me?.role === "admin";
+  const role = roleProp ?? me?.role;
+  const isAdmin = role === "admin";
+  const staffOutletId = outletIdProp ?? me?.outlet_id ?? null;
 
   const outlets = useMemo(
     () =>
@@ -63,13 +73,13 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
   const [selectedOutletId, setSelectedOutletIdState] = useState("");
 
   useEffect(() => {
-    if (!outlets.length || !me) return;
+    if (!outlets.length || !role) return;
 
-    // Staff: always locked to their assigned outlet (outlets are independent)
+    // Staff: always locked to their assigned outlet (set by admin in Users)
     if (!isAdmin) {
       const locked =
-        (me.outlet_id && outlets.some((o) => o.id === me.outlet_id)
-          ? me.outlet_id
+        (staffOutletId && outlets.some((o) => o.id === staffOutletId)
+          ? staffOutletId
           : outlets[0]?.id) ?? "";
       setSelectedOutletIdState(locked);
       return;
@@ -82,7 +92,7 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
       writeStoredOutletId(fallback);
       return fallback;
     });
-  }, [outlets, me, isAdmin]);
+  }, [outlets, role, isAdmin, staffOutletId]);
 
   useEffect(() => {
     if (!selectedOutletId) return;
@@ -92,11 +102,11 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
   const setSelectedOutlet = useCallback(
     (id: string) => {
       // Staff cannot switch outlets
-      if (me && me.role !== "admin") return;
+      if (role && role !== "admin") return;
       writeStoredOutletId(id);
       setSelectedOutletIdState(id);
     },
-    [me]
+    [role]
   );
 
   const refresh = useCallback(() => {
@@ -111,7 +121,7 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
         selectedOutlet: outlets.find((o) => o.id === selectedOutletId) ?? null,
         setSelectedOutlet,
         refresh,
-        loading: (isLoading && outlets.length === 0) || !me,
+        loading: (isLoading && outlets.length === 0) || !role,
       }}
     >
       {children}

@@ -421,9 +421,7 @@ export default function SettingsClient() {
         <div>
           <h1 className="page-title">Settings</h1>
           <p className="page-subtitle">
-            {isAdmin
-              ? "Account password, employee OT rates, and salary adjustments"
-              : "Account password"}
+            Account password, employee OT rates, and salary adjustments
           </p>
         </div>
       </div>

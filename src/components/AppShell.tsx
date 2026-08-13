@@ -11,20 +11,29 @@ interface AppShellProps {
   children: React.ReactNode;
   role: string;
   username: string;
+  outletName?: string | null;
+  outletId?: string | null;
 }
 
-export default function AppShell({ children, role, username }: AppShellProps) {
+export default function AppShell({
+  children,
+  role,
+  username,
+  outletName,
+  outletId,
+}: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <SWRProvider>
-      <OutletProvider>
+      <OutletProvider role={role} outletId={outletId}>
         <div className="app-layout">
         <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           role={role}
           username={username}
+          outletName={outletName}
         />
 
         <div className="main-content">
@@ -38,7 +47,7 @@ export default function AppShell({ children, role, username }: AppShellProps) {
               <Menu size={22} strokeWidth={2.5} />
             </button>
 
-            <OutletSwitcher />
+            <OutletSwitcher role={role} fallbackName={outletName} />
           </header>
 
           <main style={{ flex: 1, display: "flex", flexDirection: "column" }}>

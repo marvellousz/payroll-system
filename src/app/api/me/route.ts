@@ -11,5 +11,8 @@ export async function GET() {
     username: profile.username,
     role: profile.role,
     outlet_id: profile.outlet_id,
+    outlet: profile.outlet
+      ? { id: profile.outlet.id, name: profile.outlet.name }
+      : null,
   });
 }

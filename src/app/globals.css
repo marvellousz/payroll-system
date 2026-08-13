@@ -853,6 +853,34 @@ h5 { font-size: 1rem; font-weight: 600; }
 .header-switcher:focus { outline: none; border-color: var(--color-primary); }
 .header-switcher--placeholder { color: var(--color-text-muted); border-color: var(--color-border-strong); }
 
+/* Staff: locked outlet name in the same header slot as the admin switcher */
+.header-outlet-label {
+  margin-left: auto;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 0.375rem 0.875rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+}
+.header-outlet-label--page {
+  margin-left: 0;
+}
+.header-outlet-label--warn {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+.page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .page-content {
   padding: 2rem 1.5rem;
   flex: 1;

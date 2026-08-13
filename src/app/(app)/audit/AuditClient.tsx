@@ -41,10 +41,11 @@ export default function AuditClient() {
 
   const { data: me } = useSWR<Me>(swrKeys.me());
   const isAdmin = me?.role === "admin";
+  const meReady = me != null;
 
   // Admin: default all outlets selected. Staff: locked to their outlet.
   useEffect(() => {
-    if (!outlets.length) return;
+    if (!outlets.length || !meReady) return;
     if (isAdmin) {
       setSelectedOutletIds((prev) => {
         if (outletsReady && prev.length > 0) {
@@ -64,7 +65,7 @@ export default function AuditClient() {
           : outlets[0]?.id;
     if (staffOutlet) setSelectedOutletIds([staffOutlet]);
     setOutletsReady(true);
-  }, [outlets, isAdmin, me?.outlet_id, selectedOutletId, outletsReady]);
+  }, [outlets, isAdmin, meReady, me?.outlet_id, selectedOutletId, outletsReady]);
 
   useEffect(() => {
     setPage(1);

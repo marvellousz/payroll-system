@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthProfile, logAudit } from "@/lib/audit";
+import { canAccessOutlet, getAuthProfile, logAudit } from "@/lib/audit";
+import { canViewMoney } from "@/lib/money-visibility";
 
 async function getEmployee(id: string, orgId: string) {
   return prisma.employee.findFirst({
@@ -30,7 +31,7 @@ export async function GET(
   }
 
   // Staff: never see salary figures
-  if (profile.role !== "admin") {
+  if (!canViewMoney(profile)) {
     return NextResponse.json({
       ...employee,
       monthly_salary: null,
@@ -117,18 +118,21 @@ export async function PATCH(
   return NextResponse.json(updated);
 }
 
-// DELETE /api/employees/:id  (admin only)
+// DELETE /api/employees/:id — admin or staff for their outlet
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const profile = await getAuthProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (profile.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const existing = await getEmployee(id, profile.org_id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (!canAccessOutlet(profile, existing.outlet_id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   await prisma.employee.delete({ where: { id } });
 

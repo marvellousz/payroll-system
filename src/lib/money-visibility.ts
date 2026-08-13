@@ -5,6 +5,14 @@ export function canViewMoney(profile: { role: string } | null | undefined) {
   return isAdmin(profile);
 }
 
+/** True when money must be masked for this viewer (staff always). */
+export function shouldHideEmployeeMoney(
+  profile: { role: string } | null | undefined,
+  _salaryHidden?: boolean | null
+) {
+  return !canViewMoney(profile);
+}
+
 const MONEY_FIELDS = new Set([
   "monthly_salary",
   "overtime_rate",

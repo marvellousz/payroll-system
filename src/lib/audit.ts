@@ -48,6 +48,7 @@ const PROFILE_SELECT = {
   username: true,
   role: true,
   outlet_id: true,
+  outlet: { select: { id: true, name: true } },
 } as const;
 
 const getCachedProfile = unstable_cache(
@@ -56,7 +57,7 @@ const getCachedProfile = unstable_cache(
       where: { id: userId },
       select: PROFILE_SELECT,
     }),
-  ["auth-profile-v2"],
+  ["auth-profile-v3"],
   { revalidate: 60 }
 );
 

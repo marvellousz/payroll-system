@@ -37,6 +37,11 @@ export async function GET(request: Request) {
     outletIds = allOutlets.map((o) => o.id);
   }
 
+  // Staff: default to their locked outlet when none selected (e.g. prefetch)
+  if (outletIds.length === 0 && !isAdmin(profile) && profile.outlet_id) {
+    outletIds = [profile.outlet_id];
+  }
+
   if (outletIds.length === 0) {
     return NextResponse.json({ error: "Select at least one outlet" }, { status: 400 });
   }

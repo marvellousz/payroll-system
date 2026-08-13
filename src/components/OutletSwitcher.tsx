@@ -1,28 +1,47 @@
 "use client";
 
-import useSWR from "swr";
 import Dropdown from "@/components/Dropdown";
 import { useOutlets } from "@/lib/outlet-context";
-import { swrKeys } from "@/lib/swr-config";
 
-/** Admin only — staff are locked to one outlet and don't see a switcher. */
-export default function OutletSwitcher() {
-  const { outlets, selectedOutletId, setSelectedOutlet, loading } = useOutlets();
-  const { data: me } = useSWR<{ role: string }>(swrKeys.me());
-  const isAdmin = me?.role === "admin";
-
-  // Staff: no outlet picker (one outlet only)
-  if (me && !isAdmin) return null;
+/** Admin: outlet picker. Staff: locked to the outlet assigned in Users. */
+export default function OutletSwitcher({
+  role,
+  fallbackName,
+}: {
+  role: string;
+  fallbackName?: string | null;
+}) {
+  const { outlets, selectedOutletId, selectedOutlet, setSelectedOutlet, loading } = useOutlets();
+  const isAdmin = role === "admin";
 
   if (loading && outlets.length === 0) {
     return <div className="header-switcher header-switcher--placeholder">Loading…</div>;
   }
 
-  if (outlets.length === 0) return null;
+  // Staff: read-only name of the outlet assigned by admin (Users tab)
+  if (!isAdmin) {
+    const name = selectedOutlet?.name ?? fallbackName;
+    if (!name) {
+      return (
+        <div className="header-outlet-label header-outlet-label--warn" aria-label="No outlet">
+          No outlet assigned
+        </div>
+      );
+    }
+    return (
+      <div className="header-outlet-label" aria-label="Your outlet">
+        {name}
+      </div>
+    );
+  }
 
-  // Wait for role before showing admin switcher
-  if (!me) {
-    return <div className="header-switcher header-switcher--placeholder">Loading…</div>;
+  // Admin: always show the outlet changer
+  if (outlets.length === 0) {
+    return (
+      <div className="header-outlet-label header-outlet-label--warn" aria-label="No outlets">
+        No outlets yet
+      </div>
+    );
   }
 
   return (
