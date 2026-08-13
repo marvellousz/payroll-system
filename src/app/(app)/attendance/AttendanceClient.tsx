@@ -209,7 +209,7 @@ export default function AttendanceClient() {
       </div>
 
       {selectedEmployee && (
-        <div className="grid-4 mb-6">
+        <div className="attendance-stats mb-6">
           <div className="card-flat-emerald">
             <div className="stat-card__label text-emerald">Present</div>
             <div className="stat-card__value text-emerald">{presentCount}</div>
@@ -269,7 +269,12 @@ export default function AttendanceClient() {
                     const isToday = isCurrentMonth && day === today.getDate();
 
                     let dayClass = "attendance-day unmarked";
+                    const hasOt =
+                      rec?.status === "present" &&
+                      rec.overtime_units != null &&
+                      Number(rec.overtime_units) > 0;
                     if (isFuture) dayClass = "attendance-day future";
+                    else if (hasOt) dayClass = "attendance-day ot";
                     else if (rec?.status === "present") dayClass = "attendance-day present";
                     else if (rec?.status === "half") dayClass = "attendance-day half";
                     else if (rec?.status === "absent") dayClass = "attendance-day absent";
@@ -359,7 +364,7 @@ export default function AttendanceClient() {
                 A Absent
               </span>
               <span className="flex items-center gap-2 text-xs font-bold">
-                <span className="attendance-swatch" style={{ background: "#7A9EBF", borderColor: "#7A9EBF" }} />
+                <span className="attendance-swatch attendance-swatch--ot" />
                 Ot = Present + overtime
               </span>
               <span className="flex items-center gap-2 text-xs font-bold">

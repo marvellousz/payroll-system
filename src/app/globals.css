@@ -1015,6 +1015,12 @@ h5 { font-size: 1rem; font-weight: 600; }
   background: var(--att-present-bg);
   box-shadow: inset 0 0 0 2px var(--att-present);
 }
+.attendance-day.ot {
+  --att-ot: #7A9EBF;
+  --att-ot-bg: #D6E4F2;
+  background: var(--att-ot-bg);
+  box-shadow: inset 0 0 0 2px var(--att-ot);
+}
 .attendance-day.half {
   background: var(--att-half-bg);
   box-shadow: inset 0 0 0 2px var(--att-half);
@@ -1100,6 +1106,7 @@ h5 { font-size: 1rem; font-weight: 600; }
 }
 .attendance-swatch--unmarked { background: var(--att-cell-grey); }
 .attendance-swatch--present { background: var(--att-present); border-color: var(--att-present); }
+.attendance-swatch--ot { background: #7A9EBF; border-color: #7A9EBF; }
 .attendance-swatch--half { background: var(--att-half); border-color: var(--att-half); }
 .attendance-swatch--absent { background: var(--att-absent); border-color: var(--att-absent); }
 
@@ -1259,6 +1266,19 @@ h5 { font-size: 1rem; font-weight: 600; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
 
+.attendance-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .attendance-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.85rem;
+  }
+}
+
 .mt-1 { margin-top: 0.25rem; }
 .mt-2 { margin-top: 0.5rem; }
 .mt-3 { margin-top: 0.75rem; }
@@ -1408,7 +1428,23 @@ h5 { font-size: 1rem; font-weight: 600; }
   .page-header .segmented { width: 100%; }
   .page-header .month-nav { justify-content: space-between; }
 
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .attendance-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+  .attendance-stats .card-flat-emerald,
+  .attendance-stats .card-flat-amber,
+  .attendance-stats .card-flat-muted {
+    padding: 0.85rem 0.9rem;
+  }
+  .attendance-stats .stat-card__value {
+    font-size: 1.35rem;
+  }
+  .attendance-stats .stat-card__sub {
+    font-size: 0.7rem;
+  }
   .payroll-split { grid-template-columns: 1fr; gap: 1.5rem; }
 
   .card { padding: 1.25rem; }
@@ -1560,6 +1596,16 @@ h5 { font-size: 1rem; font-weight: 600; }
   .attendance-weekday {
     font-size: 0.52rem;
     padding: 0.35rem 0.05rem;
+  }
+
+  .attendance-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.65rem;
+  }
+  .attendance-stats .card-flat-emerald,
+  .attendance-stats .card-flat-amber,
+  .attendance-stats .card-flat-muted {
+    padding: 0.75rem 0.7rem;
   }
 
   .stat-card__value { font-size: 1.375rem; }
