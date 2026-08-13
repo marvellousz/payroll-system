@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import OutletSwitcher from "./OutletSwitcher";
 import { OutletProvider } from "@/lib/outlet-context";
+import { SWRProvider } from "@/lib/swr-config";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -16,8 +17,9 @@ export default function AppShell({ children, role, username }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <OutletProvider>
-      <div className="app-layout">
+    <SWRProvider>
+      <OutletProvider>
+        <div className="app-layout">
         <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
@@ -43,7 +45,8 @@ export default function AppShell({ children, role, username }: AppShellProps) {
             {children}
           </main>
         </div>
-      </div>
-    </OutletProvider>
+        </div>
+      </OutletProvider>
+    </SWRProvider>
   );
 }

@@ -40,5 +40,8 @@ export async function GET(request: Request) {
     }),
   ]);
 
-  return NextResponse.json({ logs, total, page, limit, pages: Math.ceil(total / limit) });
+  return NextResponse.json(
+    { logs, total, page, limit, pages: Math.ceil(total / limit) },
+    { headers: { "Cache-Control": "private, max-age=10, stale-while-revalidate=30" } }
+  );
 }

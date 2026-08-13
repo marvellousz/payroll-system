@@ -25,9 +25,6 @@ export async function GET(
     return NextResponse.json({ error: "month and year are required" }, { status: 400 });
   }
 
-  const employee = await verifyEmployee(id, profile.org_id);
-  if (!employee) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0, 23, 59, 59);
 
@@ -35,11 +32,14 @@ export async function GET(
     where: {
       employee_id: id,
       date: { gte: startDate, lte: endDate },
+      employee: { outlet: { org_id: profile.org_id } },
     },
     orderBy: { date: "asc" },
   });
 
-  return NextResponse.json(records);
+  return NextResponse.json(records, {
+    headers: { "Cache-Control": "private, max-age=15, stale-while-revalidate=60" },
+  });
 }
 
 // POST /api/attendance — upsert a single attendance record
@@ -57,8 +57,8 @@ export async function POST(
   if (!date || !status) {
     return NextResponse.json({ error: "date and status are required" }, { status: 400 });
   }
-  if (!["present", "absent"].includes(status)) {
-    return NextResponse.json({ error: "status must be present or absent" }, { status: 400 });
+  if (!["present", "absent", "half"].includes(status)) {
+    return NextResponse.json({ error: "status must be present, absent, or half" }, { status: 400 });
   }
 
   const employee = await verifyEmployee(id, profile.org_id);
@@ -88,9 +88,9 @@ export async function POST(
     },
   });
 
-  // Audit status change
+  // Audit in the background so the click feels instant
   if (!existing || existing.status !== status) {
-    await logAudit({
+    void logAudit({
       org_id: profile.org_id,
       user_id: profile.id,
       entity_type: "AttendanceRecord",
@@ -101,11 +101,10 @@ export async function POST(
     });
   }
 
-  // Audit overtime change
   const oldOt = existing?.overtime_units != null ? String(existing.overtime_units) : null;
   const newOt = otUnits != null ? String(otUnits) : null;
   if (oldOt !== newOt) {
-    await logAudit({
+    void logAudit({
       org_id: profile.org_id,
       user_id: profile.id,
       entity_type: "AttendanceRecord",

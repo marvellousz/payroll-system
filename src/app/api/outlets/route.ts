@@ -13,7 +13,9 @@ export async function GET() {
     include: { _count: { select: { employees: true } } },
   });
 
-  return NextResponse.json(outlets);
+  return NextResponse.json(outlets, {
+    headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=120" },
+  });
 }
 
 // POST /api/outlets — create an outlet

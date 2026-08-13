@@ -27,6 +27,7 @@ enum OvertimeUnit {
 enum AttendanceStatus {
   present
   absent
+  half
 }
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -119,6 +120,7 @@ model PayrollSummary {
   year                   Int
   days_present           Int
   days_absent            Int
+  days_half              Int      @default(0)
   paid_leave_days        Int
   base_pay               Decimal  @db.Decimal(10, 2)
   overtime_total_units   Decimal  @db.Decimal(8, 2)

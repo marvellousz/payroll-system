@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
+import { invalidatePayrollCaches, swrKeys } from "@/lib/swr-config";
+import { prefetchOutletData } from "@/lib/prefetch";
 
 interface Employee { id: string; name: string; monthly_salary: string; paid_leave_days: number; }
 interface PayrollData {
-  days_present: number; days_absent: number; paid_leave_days: number;
+  days_present: number; days_absent: number; days_half: number; paid_leave_days: number;
+  payable_days: number;
   base_pay: number; overtime_pay: number; overtime_total_units: number;
   overtime_rate_snapshot: number; total_pay: number; salary_given: number;
   previous_balance: number; monthly_balance: number; closing_balance: number;
@@ -72,35 +76,30 @@ function PaymentModal({ employee, month, year, onClose, onSuccess }: {
 export default function PayrollClient() {
   const { selectedOutletId } = useOutlets();
   const now = new Date();
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const [payrollMap, setPayrollMap] = useState<Record<string, PayrollData>>({});
-  const [loading, setLoading] = useState(false);
   const [paymentFor, setPaymentFor] = useState<Employee | null>(null);
+
+  const { data, isLoading, isValidating, mutate } = useSWR<{
+    employees: Employee[];
+    payroll: Record<string, PayrollData>;
+  }>(
+    selectedOutletId ? swrKeys.outletPayroll(selectedOutletId, month, year) : null
+  );
+
+  const employees = data?.employees ?? [];
+  const payrollMap = data?.payroll ?? {};
+  const showSkeleton = isLoading && !data;
 
   useEffect(() => {
     if (!selectedOutletId) return;
-    fetch(`/api/outlets/${selectedOutletId}/employees`)
-      .then((r) => r.json())
-      .then((data) => setEmployees(Array.isArray(data) ? data : []));
-  }, [selectedOutletId]);
+    prefetchOutletData(selectedOutletId, month, year);
+  }, [selectedOutletId, month, year]);
 
-  const fetchPayroll = useCallback(async () => {
-    if (!employees.length) { setPayrollMap({}); return; }
-    setLoading(true);
-    const results: Record<string, PayrollData> = {};
-    await Promise.all(employees.map(async (emp) => {
-      try {
-        const res = await fetch(`/api/employees/${emp.id}/payroll?month=${month}&year=${year}`);
-        if (res.ok) results[emp.id] = await res.json();
-      } catch {}
-    }));
-    setPayrollMap(results);
-    setLoading(false);
-  }, [employees, month, year]);
-
-  useEffect(() => { fetchPayroll(); }, [fetchPayroll]);
+  async function refreshPayroll() {
+    await mutate();
+    if (selectedOutletId) await invalidatePayrollCaches(selectedOutletId);
+  }
 
   async function finalizePayroll(emp: Employee) {
     await fetch(`/api/employees/${emp.id}/payroll`, {
@@ -108,7 +107,7 @@ export default function PayrollClient() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ month, year }),
     });
-    fetchPayroll();
+    await refreshPayroll();
   }
 
   function prevMonth() {
@@ -131,14 +130,17 @@ export default function PayrollClient() {
           <button className="btn btn-ghost btn-icon" onClick={prevMonth} aria-label="Previous month">
             <ChevronLeft size={18} strokeWidth={2.5} />
           </button>
-          <span className="month-nav__label font-semibold">{MONTHS[month-1]} {year}</span>
+          <span className="month-nav__label font-semibold">
+            {MONTHS[month-1]} {year}
+            {isValidating && data ? " …" : ""}
+          </span>
           <button className="btn btn-ghost btn-icon" onClick={nextMonth} aria-label="Next month">
             <ChevronRight size={18} strokeWidth={2.5} />
           </button>
         </div>
       </div>
 
-      {loading ? (
+      {showSkeleton ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
         </div>
@@ -187,8 +189,10 @@ export default function PayrollClient() {
                         Pay Breakdown
                       </div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Days Present</span><span>{p.days_present}</span></div>
+                      <div className="payroll-line"><span className="text-secondary text-sm">Half Days</span><span>{p.days_half}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Days Absent</span><span>{p.days_absent}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Paid Leave</span><span>{p.paid_leave_days} days</span></div>
+                      <div className="payroll-line"><span className="text-secondary text-sm">Payable Days</span><span>{p.payable_days}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Base Pay</span><span className="payroll-line__amount">{formatINR(p.base_pay)}</span></div>
                       <div className="payroll-line">
                         <span className="text-secondary text-sm">Overtime Pay
@@ -257,7 +261,7 @@ export default function PayrollClient() {
           employee={paymentFor}
           month={month} year={year}
           onClose={() => setPaymentFor(null)}
-          onSuccess={fetchPayroll}
+          onSuccess={refreshPayroll}
         />
       )}
     </div>

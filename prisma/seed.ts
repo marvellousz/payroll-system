@@ -135,6 +135,7 @@ async function seedAttendanceAndPayroll(
     monthly_salary: monthlySalary,
     paid_leave_days: paidLeaveDays,
     days_absent,
+    days_half: 0,
     overtime_total_units,
     overtime_rate: overtimeRate,
   });

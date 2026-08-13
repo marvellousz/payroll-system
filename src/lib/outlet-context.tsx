@@ -1,6 +1,9 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
+import { swrKeys } from "@/lib/swr-config";
+import { prefetchOutletData } from "@/lib/prefetch";
 
 export interface OutletOption {
   id: string;
@@ -36,50 +39,51 @@ function writeStoredOutletId(id: string) {
     if (id) localStorage.setItem(STORAGE_KEY, id);
     else localStorage.removeItem(STORAGE_KEY);
   } catch {
-    // ignore quota / private-mode failures
+    // ignore
   }
 }
 
 export function OutletProvider({ children }: { children: React.ReactNode }) {
-  const [outlets, setOutlets] = useState<OutletOption[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState("");
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, mutate } = useSWR<
+    Array<{ id: string; name: string; _count?: { employees?: number } }>
+  >(swrKeys.outlets());
+
+  const outlets = useMemo(
+    () =>
+      (Array.isArray(data) ? data : []).map((o) => ({
+        id: o.id,
+        name: o.name,
+        employee_count: o._count?.employees ?? 0,
+      })),
+    [data]
+  );
+
+  const [selectedOutletId, setSelectedOutletIdState] = useState("");
+
+  useEffect(() => {
+    if (!outlets.length) return;
+    setSelectedOutletIdState((prev) => {
+      const preferred = prev || readStoredOutletId();
+      if (preferred && outlets.some((o) => o.id === preferred)) return preferred;
+      const fallback = outlets[0]?.id ?? "";
+      writeStoredOutletId(fallback);
+      return fallback;
+    });
+  }, [outlets]);
+
+  useEffect(() => {
+    if (!selectedOutletId) return;
+    prefetchOutletData(selectedOutletId);
+  }, [selectedOutletId]);
 
   const setSelectedOutlet = useCallback((id: string) => {
-    setSelectedOutletId(id);
     writeStoredOutletId(id);
+    setSelectedOutletIdState(id);
   }, []);
 
   const refresh = useCallback(() => {
-    fetch("/api/outlets")
-      .then((r) => r.json())
-      .then((data) => {
-        const list = (Array.isArray(data) ? data : []).map(
-          (o: { id: string; name: string; _count?: { employees?: number } }) => ({
-            id: o.id,
-            name: o.name,
-            employee_count: o._count?.employees ?? 0,
-          })
-        );
-        setOutlets(list);
-        setSelectedOutletId((prev) => {
-          const preferred = prev || readStoredOutletId();
-          if (preferred && list.some((o) => o.id === preferred)) {
-            writeStoredOutletId(preferred);
-            return preferred;
-          }
-          const fallback = list[0]?.id ?? "";
-          writeStoredOutletId(fallback);
-          return fallback;
-        });
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+    void mutate();
+  }, [mutate]);
 
   return (
     <OutletContext.Provider
@@ -89,7 +93,7 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
         selectedOutlet: outlets.find((o) => o.id === selectedOutletId) ?? null,
         setSelectedOutlet,
         refresh,
-        loading,
+        loading: isLoading && outlets.length === 0,
       }}
     >
       {children}

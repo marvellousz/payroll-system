@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { Plus, X } from "lucide-react";
 import Dropdown from "@/components/Dropdown";
+import { swrKeys } from "@/lib/swr-config";
 
 interface UserProfile {
   id: string;
@@ -24,8 +26,8 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 }
 
 export default function UsersClient() {
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, mutate } = useSWR<UserProfile[]>(swrKeys.users());
+  const users = Array.isArray(data) ? data : [];
   const [showAdd, setShowAdd] = useState(false);
   const [formData, setFormData] = useState({
     username: "",
@@ -35,19 +37,6 @@ export default function UsersClient() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  function fetchUsers() {
-    setLoading(true);
-    fetch("/api/users")
-      .then((r) => r.json())
-      .then((data) => setUsers(Array.isArray(data) ? data : []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
 
   function openAdd() {
     setFormData({ username: "", email: "", password: "", role: "staff" });
@@ -84,7 +73,7 @@ export default function UsersClient() {
         return;
       }
       setShowAdd(false);
-      fetchUsers();
+      void mutate();
     } finally {
       setSaving(false);
     }
@@ -94,7 +83,7 @@ export default function UsersClient() {
     if (!confirm(`Are you sure you want to remove user "${user.username}"?`)) return;
     const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
     if (res.ok) {
-      fetchUsers();
+      void mutate();
     } else {
       const d = await res.json();
       alert(d.error || "Failed to delete user.");
@@ -114,7 +103,7 @@ export default function UsersClient() {
         </button>
       </div>
 
-      {loading ? (
+      {isLoading && !data ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
         </div>

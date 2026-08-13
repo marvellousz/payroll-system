@@ -27,21 +27,20 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const isLoggedIn = Boolean(claimsData?.claims?.sub);
 
   const { pathname } = request.nextUrl;
 
   const isAuthRoute = pathname.startsWith("/login");
 
-  if (!user && !isAuthRoute) {
+  if (!isLoggedIn && !isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && pathname === "/login") {
+  if (isLoggedIn && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,20 +38,33 @@ export async function logAudit(params: AuditLogParams) {
   }
 }
 
-/**
- * Get the authenticated user's profile from the current request context.
- * Returns null if unauthenticated.
- */
-export async function getAuthProfile() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+const PROFILE_SELECT = {
+  id: true,
+  org_id: true,
+  email: true,
+  username: true,
+  role: true,
+} as const;
 
-  const profile = await prisma.profile.findUnique({
-    where: { id: user.id },
-    include: { org: true },
-  });
-  return profile;
-}
+const getCachedProfile = unstable_cache(
+  async (userId: string) =>
+    prisma.profile.findUnique({
+      where: { id: userId },
+      select: PROFILE_SELECT,
+    }),
+  ["auth-profile"],
+  { revalidate: 60 }
+);
+
+/**
+ * Authenticated profile for the current request.
+ * Verifies the JWT locally (getClaims) instead of calling the Auth API,
+ * and caches the Prisma profile for 60s.
+ */
+export const getAuthProfile = cache(async () => {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const userId = data?.claims?.sub;
+  if (!userId || typeof userId !== "string") return null;
+  return getCachedProfile(userId);
+});

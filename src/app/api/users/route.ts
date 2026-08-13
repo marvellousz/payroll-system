@@ -15,7 +15,9 @@ export async function GET() {
     select: { id: true, email: true, username: true, role: true, created_at: true },
   });
 
-  return NextResponse.json(users);
+  return NextResponse.json(users, {
+    headers: { "Cache-Control": "private, max-age=20, stale-while-revalidate=60" },
+  });
 }
 
 // POST /api/users — create a staff/admin user (admin only)

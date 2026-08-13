@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { ChevronLeft, ChevronRight, Building2, Users } from "lucide-react";
+import Link from "next/link";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
+import { swrKeys } from "@/lib/swr-config";
+import { prefetchOutletData } from "@/lib/prefetch";
 
 interface Employee {
   id: string;
@@ -15,7 +19,9 @@ interface Employee {
 interface PayrollData {
   days_present: number;
   days_absent: number;
+  days_half: number;
   paid_leave_days: number;
+  payable_days: number;
   base_pay: number;
   overtime_pay: number;
   total_pay: number;
@@ -31,44 +37,26 @@ const MONTHS = [
 ];
 
 export default function DashboardClient() {
-  const { outlets, selectedOutletId, loading } = useOutlets();
+  const { outlets, selectedOutletId, loading: outletsLoading } = useOutlets();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [payrollMap, setPayrollMap] = useState<Record<string, PayrollData>>({});
-  const [loadingEmployees, setLoadingEmployees] = useState(false);
-  const [loadingPayroll, setLoadingPayroll] = useState(false);
+
+  const { data, isLoading, isValidating } = useSWR<{
+    employees: Employee[];
+    payroll: Record<string, PayrollData>;
+  }>(
+    selectedOutletId ? swrKeys.outletPayroll(selectedOutletId, month, year) : null
+  );
+
+  const employees = data?.employees ?? [];
+  const payrollMap = data?.payroll ?? {};
+  const showSkeleton = isLoading && !data;
 
   useEffect(() => {
     if (!selectedOutletId) return;
-    setLoadingEmployees(true);
-    fetch(`/api/outlets/${selectedOutletId}/employees`)
-      .then((r) => r.json())
-      .then((data) => setEmployees(data))
-      .catch(console.error)
-      .finally(() => setLoadingEmployees(false));
-  }, [selectedOutletId]);
-
-  const fetchPayroll = useCallback(async () => {
-    if (!employees.length) { setPayrollMap({}); return; }
-    setLoadingPayroll(true);
-    const results: Record<string, PayrollData> = {};
-    await Promise.all(
-      employees.map(async (emp) => {
-        try {
-          const res = await fetch(
-            `/api/employees/${emp.id}/payroll?month=${month}&year=${year}`
-          );
-          if (res.ok) results[emp.id] = await res.json();
-        } catch { /* ignore */ }
-      })
-    );
-    setPayrollMap(results);
-    setLoadingPayroll(false);
-  }, [employees, month, year]);
-
-  useEffect(() => { fetchPayroll(); }, [fetchPayroll]);
+    prefetchOutletData(selectedOutletId, month, year);
+  }, [selectedOutletId, month, year]);
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear((y) => y - 1); }
@@ -85,20 +73,18 @@ export default function DashboardClient() {
 
   return (
     <div className="page-content">
-      {/* Page Header */}
       <div className="page-header">
         <div>
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Monthly payroll overview & balance summary</p>
         </div>
-
-        {/* Month Selector */}
         <div className="month-nav">
           <button className="btn btn-ghost btn-icon" onClick={prevMonth} aria-label="Previous month">
             <ChevronLeft size={18} strokeWidth={2.5} />
           </button>
           <span className="month-nav__label">
             {MONTHS[month - 1]} {year}
+            {isValidating && data ? " …" : ""}
           </span>
           <button className="btn btn-ghost btn-icon" onClick={nextMonth} aria-label="Next month">
             <ChevronRight size={18} strokeWidth={2.5} />
@@ -106,18 +92,17 @@ export default function DashboardClient() {
         </div>
       </div>
 
-      {!loading && outlets.length === 0 && (
+      {!outletsLoading && outlets.length === 0 && (
         <div className="empty-state">
           <div className="empty-state__icon">
             <Building2 size={32} strokeWidth={2} />
           </div>
           <p className="empty-state__title">No outlets configured</p>
           <p className="empty-state__desc">Create an outlet to start managing employees and payroll.</p>
-          <a href="/outlets" className="btn btn-primary mt-4">Add Outlet</a>
+          <Link href="/outlets" className="btn btn-primary mt-4">Add Outlet</Link>
         </div>
       )}
 
-      {/* Summary Color-Block Stat Cards */}
       {selectedOutletId && employees.length > 0 && (
         <>
           <div className="grid-3 mb-6">
@@ -126,13 +111,11 @@ export default function DashboardClient() {
               <div className="stat-card__value text-blue">{formatINR(totalPayroll)}</div>
               <div className="stat-card__sub">{MONTHS[month-1]} {year}</div>
             </div>
-
             <div className="card-flat-emerald">
               <div className="stat-card__label text-emerald">Total Given</div>
               <div className="stat-card__value text-emerald">{formatINR(totalGiven)}</div>
               <div className="stat-card__sub">Salary disbursed</div>
             </div>
-
             <div className="card-flat-amber">
               <div className="stat-card__label text-amber">Net Balance</div>
               <div className="stat-card__value text-amber">{formatINR(totalBalance)}</div>
@@ -142,8 +125,7 @@ export default function DashboardClient() {
             </div>
           </div>
 
-          {/* Employee Breakdown List */}
-          {loadingEmployees || loadingPayroll ? (
+          {showSkeleton ? (
             <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
               <span className="spinner spinner-lg" />
             </div>
@@ -153,7 +135,6 @@ export default function DashboardClient() {
                 const p = payrollMap[emp.id];
                 return (
                   <div key={emp.id} className="card">
-                    {/* Header */}
                     <div className="card-header-row mb-4 pb-4 border-b">
                       <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
                         <div
@@ -174,76 +155,34 @@ export default function DashboardClient() {
                         </div>
                       </div>
                       <div className="card-header-row__actions">
-                        <a href={`/employees/${emp.id}`} className="btn btn-secondary btn-sm">
+                        <Link href={`/employees/${emp.id}`} className="btn btn-secondary btn-sm" prefetch>
                           View Details →
-                        </a>
+                        </Link>
                       </div>
                     </div>
 
                     {p ? (
                       <div className="payroll-split" style={{ gap: "1.5rem" }}>
-                        {/* Pay Breakdown */}
                         <div>
-                          <div className="text-muted text-xs font-bold uppercase mb-2">
-                            Pay Breakdown
-                          </div>
-                          <div className="payroll-line">
-                            <span className="text-secondary">Days Present</span>
-                            <span className="font-bold">{p.days_present}</span>
-                          </div>
-                          <div className="payroll-line">
-                            <span className="text-secondary">Days Absent</span>
-                            <span className="font-bold">{p.days_absent}</span>
-                          </div>
-                          <div className="payroll-line">
-                            <span className="text-secondary">Paid Leave</span>
-                            <span className="font-bold">{p.paid_leave_days}d</span>
-                          </div>
-                          <div className="payroll-line">
-                            <span className="text-secondary">Base Pay</span>
-                            <span className="payroll-line__amount">{formatINR(p.base_pay)}</span>
-                          </div>
-                          <div className="payroll-line">
-                            <span className="text-secondary">Overtime Pay</span>
-                            <span className="payroll-line__amount">{formatINR(p.overtime_pay)}</span>
-                          </div>
-                          <div className="payroll-line total divider">
-                            <span>Total Pay</span>
-                            <span className="payroll-line__amount amount-positive">{formatINR(p.total_pay)}</span>
-                          </div>
+                          <div className="text-muted text-xs font-bold uppercase mb-2">Pay Breakdown</div>
+                          <div className="payroll-line"><span className="text-secondary">Days Present</span><span className="font-bold">{p.days_present}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Half Days</span><span className="font-bold">{p.days_half}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Days Absent</span><span className="font-bold">{p.days_absent}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Paid Leave</span><span className="font-bold">{p.paid_leave_days}d</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-bold">{p.payable_days}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{formatINR(p.base_pay)}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Overtime Pay</span><span className="payroll-line__amount">{formatINR(p.overtime_pay)}</span></div>
+                          <div className="payroll-line total divider"><span>Total Pay</span><span className="payroll-line__amount amount-positive">{formatINR(p.total_pay)}</span></div>
                         </div>
-
-                        {/* Balance */}
                         <div>
-                          <div className="text-muted text-xs font-bold uppercase mb-2">
-                            Balance Summary
-                          </div>
-                          <div className="payroll-line">
-                            <span className="text-secondary">Salary Given</span>
-                            <span className="payroll-line__amount">{formatINR(p.salary_given)}</span>
-                          </div>
-                          <div className="payroll-line">
-                            <span className="text-secondary">Previous Balance</span>
-                            <span className={`payroll-line__amount ${p.previous_balance >= 0 ? "" : "amount-negative"}`}>
-                              {formatINR(p.previous_balance)}
-                            </span>
-                          </div>
-                          <div className="payroll-line total divider">
-                            <span>Current Balance</span>
-                            <span className={`payroll-line__amount ${p.closing_balance >= 0 ? "amount-positive" : "amount-negative"}`}>
-                              {formatINR(p.closing_balance)}
-                            </span>
-                          </div>
+                          <div className="text-muted text-xs font-bold uppercase mb-2">Balance Summary</div>
+                          <div className="payroll-line"><span className="text-secondary">Salary Given</span><span className="payroll-line__amount">{formatINR(p.salary_given)}</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Previous Balance</span><span className={`payroll-line__amount ${p.previous_balance >= 0 ? "" : "amount-negative"}`}>{formatINR(p.previous_balance)}</span></div>
+                          <div className="payroll-line total divider"><span>Current Balance</span><span className={`payroll-line__amount ${p.closing_balance >= 0 ? "amount-positive" : "amount-negative"}`}>{formatINR(p.closing_balance)}</span></div>
                           <div style={{ marginTop: "1rem" }}>
-                            {p.closing_balance > 0 && (
-                              <span className="badge badge-warning">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} Owed</span>
-                            )}
-                            {p.closing_balance < 0 && (
-                              <span className="badge badge-danger">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} Advance</span>
-                            )}
-                            {p.closing_balance === 0 && (
-                              <span className="badge badge-success">Fully Settled</span>
-                            )}
+                            {p.closing_balance > 0 && <span className="badge badge-warning">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} Owed</span>}
+                            {p.closing_balance < 0 && <span className="badge badge-danger">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} Advance</span>}
+                            {p.closing_balance === 0 && <span className="badge badge-success">Fully Settled</span>}
                           </div>
                         </div>
                       </div>
@@ -258,14 +197,12 @@ export default function DashboardClient() {
         </>
       )}
 
-      {selectedOutletId && employees.length === 0 && !loadingEmployees && (
+      {selectedOutletId && employees.length === 0 && !showSkeleton && (
         <div className="empty-state">
-          <div className="empty-state__icon">
-            <Users size={32} strokeWidth={2} />
-          </div>
+          <div className="empty-state__icon"><Users size={32} strokeWidth={2} /></div>
           <p className="empty-state__title">No employees in this outlet</p>
           <p className="empty-state__desc">Add employees to start tracking attendance and calculating payroll.</p>
-          <a href="/employees" className="btn btn-primary mt-4">Add Employee</a>
+          <Link href="/employees" className="btn btn-primary mt-4">Add Employee</Link>
         </div>
       )}
     </div>

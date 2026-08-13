@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { Plus, X, Building2 } from "lucide-react";
 import Dropdown from "@/components/Dropdown";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
+import { swrKeys } from "@/lib/swr-config";
 
 interface Outlet {
   id: string;
@@ -28,8 +30,8 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 
 export default function OutletsClient() {
   const { refresh: refreshOutlets } = useOutlets();
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, mutate } = useSWR<Outlet[]>(swrKeys.outlets());
+  const outlets = Array.isArray(data) ? data : [];
   const [showAdd, setShowAdd] = useState(false);
   const [editOutlet, setEditOutlet] = useState<Outlet | null>(null);
   const [formData, setFormData] = useState({
@@ -39,19 +41,6 @@ export default function OutletsClient() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  function fetchOutlets() {
-    setLoading(true);
-    fetch("/api/outlets")
-      .then((r) => r.json())
-      .then((data) => setOutlets(Array.isArray(data) ? data : []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    fetchOutlets();
-  }, []);
 
   function openAdd() {
     setFormData({ name: "", overtime_rate: "0", overtime_unit: "hour" });
@@ -104,7 +93,7 @@ export default function OutletsClient() {
         setShowAdd(false);
         refreshOutlets();
       }
-      fetchOutlets();
+      void mutate();
     } finally {
       setSaving(false);
     }
@@ -175,7 +164,7 @@ export default function OutletsClient() {
         </button>
       </div>
 
-      {loading ? (
+      {isLoading && !data ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
         </div>

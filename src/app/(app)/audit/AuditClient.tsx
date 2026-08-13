@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import useSWR from "swr";
 import Dropdown from "@/components/Dropdown";
 import DatePicker from "@/components/DatePicker";
+import { swrKeys } from "@/lib/swr-config";
 
 interface AuditLogItem {
   id: string;
@@ -35,40 +37,30 @@ function formatAuditValue(value: string | null) {
 }
 
 export default function AuditClient() {
-  const [logs, setLogs] = useState<AuditLogItem[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pages, setPages] = useState(1);
-  const [loading, setLoading] = useState(true);
-
-  // Filters
   const [entityType, setEntityType] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const fetchLogs = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    params.set("page", String(page));
-    params.set("limit", "25");
-    if (entityType) params.set("entity_type", entityType);
-    if (dateFrom) params.set("date_from", dateFrom);
-    if (dateTo) params.set("date_to", dateTo);
-
-    fetch(`/api/audit-logs?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setLogs(data.logs ?? []);
-        setTotal(data.total ?? 0);
-        setPages(data.pages ?? 1);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+  const params = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set("page", String(page));
+    p.set("limit", "25");
+    if (entityType) p.set("entity_type", entityType);
+    if (dateFrom) p.set("date_from", dateFrom);
+    if (dateTo) p.set("date_to", dateTo);
+    return p;
   }, [page, entityType, dateFrom, dateTo]);
 
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
+  const { data, isLoading } = useSWR<{
+    logs: AuditLogItem[];
+    total: number;
+    pages: number;
+  }>(swrKeys.auditLogs(params));
+
+  const logs = data?.logs ?? [];
+  const total = data?.total ?? 0;
+  const pages = data?.pages ?? 1;
 
   return (
     <div className="page-content animate-fade-in">
@@ -129,7 +121,7 @@ export default function AuditClient() {
       </div>
 
       {/* Logs Table */}
-      {loading ? (
+      {isLoading && !data ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
         </div>

@@ -13,6 +13,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useOutlets } from "@/lib/outlet-context";
+import { prefetchRouteData } from "@/lib/prefetch";
 
 interface NavItem {
   label: string;
@@ -71,6 +73,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, onClose, role, username }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { selectedOutletId } = useOutlets();
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -104,8 +107,12 @@ export default function Sidebar({ isOpen, onClose, role, username }: SidebarProp
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch
                 className={`sidebar__link ${isActive ? "active" : ""}`}
                 onClick={onClose}
+                onMouseEnter={() => {
+                  if (selectedOutletId) prefetchRouteData(item.href, selectedOutletId);
+                }}
               >
                 <span>{item.icon}</span>
                 {item.label}

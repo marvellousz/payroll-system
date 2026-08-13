@@ -6,6 +6,12 @@ const isDesktopBuild = process.env.DESKTOP_BUILD === "1";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  experimental: {
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+  },
   ...(isDesktopBuild
     ? {
         output: "standalone" as const,

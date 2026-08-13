@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { Plus, X, Users } from "lucide-react";
+import Link from "next/link";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
+import { swrKeys } from "@/lib/swr-config";
 
 interface Employee {
   id: string;
@@ -26,24 +29,15 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 
 export default function EmployeesClient() {
   const { selectedOutletId } = useOutlets();
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { data, isLoading, mutate } = useSWR<Employee[]>(
+    selectedOutletId ? swrKeys.employees(selectedOutletId) : null
+  );
+  const employees = Array.isArray(data) ? data : [];
   const [showAdd, setShowAdd] = useState(false);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState({ name: "", monthly_salary: "", paid_leave_days: "0" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  const fetchEmployees = useCallback(() => {
-    if (!selectedOutletId) return;
-    setLoading(true);
-    fetch(`/api/outlets/${selectedOutletId}/employees`)
-      .then((r) => r.json())
-      .then((data) => setEmployees(Array.isArray(data) ? data : []))
-      .finally(() => setLoading(false));
-  }, [selectedOutletId]);
-
-  useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
 
   function openAdd() {
     setFormData({ name: "", monthly_salary: "", paid_leave_days: "0" });
@@ -95,7 +89,7 @@ export default function EmployeesClient() {
         if (!res.ok) { const d = await res.json(); setError(d.error); return; }
         setShowAdd(false);
       }
-      fetchEmployees();
+      void mutate();
     } finally {
       setSaving(false);
     }
@@ -104,7 +98,7 @@ export default function EmployeesClient() {
   async function handleDelete(emp: Employee) {
     if (!confirm(`Delete employee "${emp.name}"? This action cannot be undone.`)) return;
     await fetch(`/api/employees/${emp.id}`, { method: "DELETE" });
-    fetchEmployees();
+    void mutate();
   }
 
   const EmpForm = (
@@ -126,7 +120,7 @@ export default function EmployeesClient() {
         <input id="emp-leave" type="number" className="form-input" min={0} max={30} step={1}
           value={formData.paid_leave_days}
           onChange={(e) => setFormData((f) => ({ ...f, paid_leave_days: e.target.value }))} />
-        <span className="form-hint">Factor in (30 - absent + paid leave) calculation.</span>
+        <span className="form-hint">Added on top of payable days: 30 − absent − (0.5 × half) + paid leave.</span>
       </div>
       <div className="modal-footer">
         <button className="btn btn-secondary" onClick={() => { setShowAdd(false); setEditEmployee(null); }}>Cancel</button>
@@ -151,7 +145,7 @@ export default function EmployeesClient() {
       </div>
 
       {/* Table */}
-      {loading ? (
+      {isLoading && !data ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
         </div>
@@ -187,7 +181,7 @@ export default function EmployeesClient() {
                       }}>
                         {emp.name.charAt(0).toUpperCase()}
                       </div>
-                      <a href={`/employees/${emp.id}`} className="text-primary">{emp.name}</a>
+                      <Link href={`/employees/${emp.id}`} className="text-primary" prefetch>{emp.name}</Link>
                     </div>
                   </td>
                   <td className="font-extrabold text-base">{formatINR(Number(emp.monthly_salary))}</td>
@@ -197,7 +191,7 @@ export default function EmployeesClient() {
                   <td>
                     <div className="flex gap-2 flex-wrap">
                       <button className="btn btn-secondary btn-sm" onClick={() => openEdit(emp)}>Edit</button>
-                      <a href={`/attendance?employee=${emp.id}`} className="btn btn-outline btn-sm">Attendance</a>
+                      <Link href={`/attendance?employee=${emp.id}`} className="btn btn-outline btn-sm" prefetch>Attendance</Link>
                       <button className="btn btn-danger btn-sm" onClick={() => handleDelete(emp)}>Delete</button>
                     </div>
                   </td>
