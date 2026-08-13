@@ -50,6 +50,7 @@ export async function POST(
     old_value: null,
     new_value: `Undid salary adjustment (${snapshot.length} employee${snapshot.length === 1 ? "" : "s"} restored)`,
     highlighted: true,
+    outlet_id: adjustment.outlet_id,
   });
 
   for (const row of snapshot) {
@@ -62,6 +63,7 @@ export async function POST(
       old_value: null,
       new_value: String(row.monthly_salary),
       highlighted: true,
+      outlet_id: adjustment.outlet_id,
     });
   }
 

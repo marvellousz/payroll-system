@@ -40,6 +40,7 @@ export async function PATCH(
         field_changed: String(field),
         old_value: String(existing[field as keyof typeof existing]),
         new_value: String(body[field]),
+        outlet_id: id,
       });
     }
   }

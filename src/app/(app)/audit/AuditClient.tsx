@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import useSWR from "swr";
 import Dropdown from "@/components/Dropdown";
 import DatePicker from "@/components/DatePicker";
+import { useOutlets } from "@/lib/outlet-context";
 import { formatAuditDisplay, shouldHighlightAudit } from "@/lib/audit-format";
 import { swrKeys } from "@/lib/swr-config";
 
@@ -20,53 +21,117 @@ interface AuditLogItem {
     username: string;
     email: string;
   };
+  outlet?: { id: string; name: string } | null;
 }
 
 interface Me {
   role: string;
+  outlet_id?: string | null;
 }
 
 export default function AuditClient() {
+  const { outlets, selectedOutletId } = useOutlets();
   const [page, setPage] = useState(1);
   const [entityType, setEntityType] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [selectedOutletIds, setSelectedOutletIds] = useState<string[]>([]);
+  const [outletsReady, setOutletsReady] = useState(false);
 
   const { data: me } = useSWR<Me>(swrKeys.me());
   const isAdmin = me?.role === "admin";
 
+  // Admin: default all outlets selected. Staff: locked to their outlet.
+  useEffect(() => {
+    if (!outlets.length) return;
+    if (isAdmin) {
+      setSelectedOutletIds((prev) => {
+        if (outletsReady && prev.length > 0) {
+          const valid = prev.filter((id) => outlets.some((o) => o.id === id));
+          return valid.length > 0 ? valid : outlets.map((o) => o.id);
+        }
+        return outlets.map((o) => o.id);
+      });
+      setOutletsReady(true);
+      return;
+    }
+    const staffOutlet =
+      me?.outlet_id && outlets.some((o) => o.id === me.outlet_id)
+        ? me.outlet_id
+        : selectedOutletId && outlets.some((o) => o.id === selectedOutletId)
+          ? selectedOutletId
+          : outlets[0]?.id;
+    if (staffOutlet) setSelectedOutletIds([staffOutlet]);
+    setOutletsReady(true);
+  }, [outlets, isAdmin, me?.outlet_id, selectedOutletId, outletsReady]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedOutletIds.join(","), entityType, dateFrom, dateTo]);
+
+  const allSelected =
+    outlets.length > 0 && selectedOutletIds.length === outlets.length;
+
   const params = useMemo(() => {
+    if (!selectedOutletIds.length) return null;
     const p = new URLSearchParams();
+    if (isAdmin && allSelected) {
+      p.set("all", "1");
+    } else {
+      p.set("outlet_ids", selectedOutletIds.join(","));
+    }
     p.set("page", String(page));
     p.set("limit", "25");
     if (entityType) p.set("entity_type", entityType);
     if (dateFrom) p.set("date_from", dateFrom);
     if (dateTo) p.set("date_to", dateTo);
     return p;
-  }, [page, entityType, dateFrom, dateTo]);
+  }, [selectedOutletIds, allSelected, isAdmin, page, entityType, dateFrom, dateTo]);
 
   const { data, isLoading, mutate } = useSWR<{
     logs: AuditLogItem[];
     total: number;
     pages: number;
-  }>(swrKeys.auditLogs(params));
+  }>(params ? swrKeys.auditLogs(params) : null);
 
   const logs = data?.logs ?? [];
   const total = data?.total ?? 0;
   const pages = data?.pages ?? 1;
 
+  function toggleAll(checked: boolean) {
+    if (!isAdmin) return;
+    setSelectedOutletIds(checked ? outlets.map((o) => o.id) : []);
+  }
+
+  function toggleOutlet(id: string, checked: boolean) {
+    if (!isAdmin) return;
+    setSelectedOutletIds((prev) => {
+      if (checked) return prev.includes(id) ? prev : [...prev, id];
+      return prev.filter((x) => x !== id);
+    });
+  }
+
   async function handleDeleteOld() {
+    if (!isAdmin || selectedOutletIds.length === 0) return;
+    const label = allSelected
+      ? "all outlets"
+      : selectedOutletIds.length === 1
+        ? outlets.find((o) => o.id === selectedOutletIds[0])?.name ?? "this outlet"
+        : `${selectedOutletIds.length} selected outlets`;
     if (
       !confirm(
-        "Delete all audit logs older than 1 year? This cannot be undone. A summary entry will be kept."
+        `Delete all audit logs older than 1 year for ${label}? This cannot be undone. A summary entry will be kept.`
       )
     ) {
       return;
     }
     setDeleting(true);
     try {
-      const res = await fetch("/api/audit-logs", { method: "DELETE" });
+      const q = new URLSearchParams();
+      if (allSelected) q.set("all", "1");
+      else q.set("outlet_ids", selectedOutletIds.join(","));
+      const res = await fetch(`/api/audit-logs?${q.toString()}`, { method: "DELETE" });
       const body = await res.json();
       if (!res.ok) {
         alert(body.error || "Failed to delete logs");
@@ -79,16 +144,33 @@ export default function AuditClient() {
     }
   }
 
+  const outletFilterLabel = allSelected
+    ? "All outlets"
+    : selectedOutletIds.length === 1
+      ? outlets.find((o) => o.id === selectedOutletIds[0])?.name ?? "1 outlet"
+      : `${selectedOutletIds.length} outlets`;
+
   return (
     <div className="page-content animate-fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Audit Logs</h1>
-          <p className="page-subtitle">Readable history of system changes ({total} total)</p>
+          <p className="page-subtitle">
+            {selectedOutletIds.length
+              ? `${outletFilterLabel} · readable history (${total} total)`
+              : "Select at least one outlet"}
+          </p>
         </div>
-        {isAdmin && (
+        {isAdmin && selectedOutletIds.length > 0 && (
           <button className="btn btn-danger" onClick={handleDeleteOld} disabled={deleting}>
-            {deleting ? <><span className="spinner" />Deleting…</> : "Delete logs older than 1 year"}
+            {deleting ? (
+              <>
+                <span className="spinner" />
+                Deleting…
+              </>
+            ) : (
+              "Delete logs older than 1 year"
+            )}
           </button>
         )}
       </div>
@@ -98,7 +180,10 @@ export default function AuditClient() {
           <div className="form-group" style={{ flex: "1 1 180px" }}>
             <Dropdown
               value={entityType}
-              onChange={(v) => { setEntityType(v); setPage(1); }}
+              onChange={(v) => {
+                setEntityType(v);
+                setPage(1);
+              }}
               options={[
                 { value: "", label: "All Entities" },
                 { value: "Employee", label: "Employee" },
@@ -106,8 +191,8 @@ export default function AuditClient() {
                 { value: "PayrollSummary", label: "Payroll" },
                 { value: "SalaryPayment", label: "Salary Payment" },
                 { value: "SalaryAdjustment", label: "Salary Adjustment" },
+                { value: "OvertimeRateAdjustment", label: "OT Rate" },
                 { value: "Outlet", label: "Outlet" },
-                { value: "Profile", label: "User/Profile" },
                 { value: "AuditLog", label: "Audit meta" },
               ]}
               label="Entity Type"
@@ -118,7 +203,10 @@ export default function AuditClient() {
             <DatePicker
               label="From Date"
               value={dateFrom}
-              onChange={(v) => { setDateFrom(v); setPage(1); }}
+              onChange={(v) => {
+                setDateFrom(v);
+                setPage(1);
+              }}
             />
           </div>
 
@@ -126,7 +214,10 @@ export default function AuditClient() {
             <DatePicker
               label="To Date"
               value={dateTo}
-              onChange={(v) => { setDateTo(v); setPage(1); }}
+              onChange={(v) => {
+                setDateTo(v);
+                setPage(1);
+              }}
             />
           </div>
 
@@ -134,23 +225,65 @@ export default function AuditClient() {
             <div style={{ marginTop: "auto" }}>
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => { setEntityType(""); setDateFrom(""); setDateTo(""); setPage(1); }}
+                onClick={() => {
+                  setEntityType("");
+                  setDateFrom("");
+                  setDateTo("");
+                  setPage(1);
+                }}
               >
                 Clear Filters
               </button>
             </div>
           )}
         </div>
+
+        {isAdmin && outlets.length > 0 && (
+          <div
+            className="mt-4 pt-4 border-t"
+            style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem 1.25rem", alignItems: "center" }}
+          >
+            <span className="text-muted text-xs font-semibold uppercase" style={{ letterSpacing: "0.04em" }}>
+              Outlets
+            </span>
+            <label className="flex items-center gap-2 text-sm font-semibold" style={{ cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={(e) => toggleAll(e.target.checked)}
+              />
+              All
+            </label>
+            {outlets.map((o) => (
+              <label
+                key={o.id}
+                className="flex items-center gap-2 text-sm font-semibold"
+                style={{ cursor: "pointer" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedOutletIds.includes(o.id)}
+                  onChange={(e) => toggleOutlet(o.id, e.target.checked)}
+                />
+                {o.name}
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
-      {isLoading && !data ? (
+      {!selectedOutletIds.length ? (
+        <div className="card text-center text-muted" style={{ padding: "2rem" }}>
+          Select at least one outlet to view audit logs.
+        </div>
+      ) : isLoading && !data ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
         </div>
       ) : logs.length === 0 ? (
         <div className="empty-state">
           <p className="empty-state__title">No audit records found</p>
-          <p className="empty-state__desc">Try adjusting your filters.</p>
+          <p className="empty-state__desc">Try adjusting your filters or outlet selection.</p>
         </div>
       ) : (
         <>
@@ -160,6 +293,8 @@ export default function AuditClient() {
                 <tr>
                   <th>Timestamp</th>
                   <th>User</th>
+                  {!allSelected && selectedOutletIds.length > 1 && <th>Outlet</th>}
+                  {allSelected && <th>Outlet</th>}
                   <th>Summary</th>
                   <th>Details</th>
                 </tr>
@@ -168,8 +303,12 @@ export default function AuditClient() {
                 {logs.map((log) => {
                   const display = formatAuditDisplay(log);
                   const highlight = shouldHighlightAudit(log);
+                  const showOutlet = allSelected || selectedOutletIds.length > 1;
                   return (
-                    <tr key={log.id} className={highlight ? "audit-row--highlight" : undefined}>
+                    <tr
+                      key={log.id}
+                      className={highlight ? "audit-row--highlight" : undefined}
+                    >
                       <td className="text-muted text-xs white-space-nowrap">
                         {new Date(log.timestamp).toLocaleString("en-IN", {
                           day: "numeric",
@@ -180,13 +319,23 @@ export default function AuditClient() {
                         })}
                       </td>
                       <td>
-                        <span className="font-medium text-sm">{log.user?.username ?? "System"}</span>
+                        <span className="font-medium text-sm">
+                          {log.user?.username ?? "System"}
+                        </span>
                       </td>
+                      {showOutlet && (
+                        <td className="text-secondary text-sm">
+                          {log.outlet?.name ?? "—"}
+                        </td>
+                      )}
                       <td>
                         <span className="font-semibold text-sm">{display.summary}</span>
                         <div className="text-muted text-xs mt-1">{log.entity_type}</div>
                       </td>
-                      <td className="text-sm" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                      <td
+                        className="text-sm"
+                        style={{ whiteSpace: "normal", wordBreak: "break-word" }}
+                      >
                         {display.detail}
                       </td>
                     </tr>

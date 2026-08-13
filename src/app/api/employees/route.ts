@@ -48,6 +48,7 @@ export async function POST(request: Request) {
     field_changed: "created",
     old_value: null,
     new_value: `Employee added: ${employee.name}`,
+    outlet_id,
   });
 
   return NextResponse.json(employee, { status: 201 });

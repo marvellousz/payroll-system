@@ -5,6 +5,7 @@ import useSWR from "swr";
 import Dropdown from "@/components/Dropdown";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
+import { createClient } from "@/lib/supabase/client";
 import { invalidatePayrollCaches, swrKeys } from "@/lib/swr-config";
 
 interface Adjustment {
@@ -37,14 +38,6 @@ interface OutletEmp {
   overtime_rate?: string | number;
 }
 
-interface Outlet {
-  id: string;
-  name: string;
-  overtime_rate: string;
-  overtime_unit?: string;
-  _count?: { employees?: number };
-}
-
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -54,20 +47,148 @@ function formatPlainSalary(n: number) {
   return Number.isInteger(n) ? String(n) : String(n);
 }
 
-export default function SettingsClient() {
-  const { data: adjustments, mutate } = useSWR<Adjustment[]>(swrKeys.salaryAdjustments());
-  const { data: otAdjustments, mutate: mutateOtAdj } = useSWR<OtAdjustment[]>(
-    swrKeys.overtimeAdjustments()
+function ChangePasswordCard() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError("Fill in all password fields.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirmation do not match.");
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setError("New password must be different from the current password.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const supabase = createClient();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user?.email) {
+        setError("Could not load your account. Sign in again and retry.");
+        return;
+      }
+
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: userData.user.email,
+        password: currentPassword,
+      });
+      if (verifyError) {
+        setError("Current password is incorrect.");
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (updateError) {
+        setError(updateError.message || "Failed to update password.");
+        return;
+      }
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setMessage("Password updated successfully.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card mb-6">
+      <h2 className="text-lg font-bold mb-1">Change password</h2>
+      <p className="text-secondary text-sm mb-4">
+        Update the password for your own login.
+      </p>
+      <form
+        onSubmit={(e) => void handleSubmit(e)}
+        style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 420 }}
+      >
+        {error && <div className="alert alert-danger">{error}</div>}
+        {message && <div className="alert alert-success">{message}</div>}
+        <div className="form-group">
+          <label className="form-label" htmlFor="current-password">Current password</label>
+          <input
+            id="current-password"
+            type="password"
+            className="form-input"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label" htmlFor="new-password">New password</label>
+          <input
+            id="new-password"
+            type="password"
+            className="form-input"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label" htmlFor="confirm-password">Confirm new password</label>
+          <input
+            id="confirm-password"
+            type="password"
+            className="form-input"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
+        </div>
+        <button type="submit" className="btn btn-primary" disabled={saving} style={{ alignSelf: "flex-start" }}>
+          {saving ? <><span className="spinner" />Updating…</> : "Update password"}
+        </button>
+      </form>
+    </div>
   );
-  const { data: outlets } = useSWR<Outlet[]>(swrKeys.outlets());
+}
+
+export default function SettingsClient() {
+  const { data: me } = useSWR<{ role: string }>(swrKeys.me());
+  const isAdmin = me?.role === "admin";
   const { selectedOutletId, selectedOutlet } = useOutlets();
-  const [outletId, setOutletId] = useState("");
+  const salaryOutletId = selectedOutletId;
   const otOutletId = selectedOutletId;
+
+  const { data: adjustments, mutate } = useSWR<Adjustment[]>(
+    isAdmin && salaryOutletId ? swrKeys.salaryAdjustments(salaryOutletId) : null
+  );
+  const { data: otAdjustments, mutate: mutateOtAdj } = useSWR<OtAdjustment[]>(
+    isAdmin && otOutletId ? swrKeys.overtimeAdjustments(otOutletId) : null
+  );
+
   const { data: employees } = useSWR<OutletEmp[]>(
-    outletId ? swrKeys.employees(outletId) : null
+    isAdmin && salaryOutletId ? swrKeys.employees(salaryOutletId) : null
   );
   const { data: otEmployees, mutate: mutateOtEmployees } = useSWR<OutletEmp[]>(
-    otOutletId ? swrKeys.employees(otOutletId) : null
+    isAdmin && otOutletId ? swrKeys.employees(otOutletId) : null
   );
 
   const [scope, setScope] = useState<"all" | "employee">("all");
@@ -90,20 +211,17 @@ export default function SettingsClient() {
   const currentMonthLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
 
   useEffect(() => {
-    const preferred = selectedOutletId || outlets?.[0]?.id || "";
-    if (!outletId && preferred) setOutletId(preferred);
-  }, [selectedOutletId, outlets, outletId]);
-
-  useEffect(() => {
     setOtDrafts({});
     setOtMessage("");
     setOtError("");
   }, [otOutletId]);
 
-  const outletOptions = useMemo(
-    () => (Array.isArray(outlets) ? outlets : []).map((o) => ({ value: o.id, label: o.name })),
-    [outlets]
-  );
+  useEffect(() => {
+    setEmployeeId("");
+    setError("");
+    setMessage("");
+  }, [salaryOutletId]);
+
   const empOptions = useMemo(
     () =>
       (Array.isArray(employees) ? employees : []).map((e) => ({
@@ -119,6 +237,10 @@ export default function SettingsClient() {
     e.preventDefault();
     setError("");
     setMessage("");
+    if (!salaryOutletId) {
+      setError("Select an outlet in the header.");
+      return;
+    }
     if (!value || !Number.isFinite(Number(value))) {
       setError("Enter a valid adjustment value.");
       return;
@@ -133,6 +255,7 @@ export default function SettingsClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          outlet_id: salaryOutletId,
           scope,
           employee_id: scope === "employee" ? employeeId : undefined,
           mode,
@@ -297,10 +420,18 @@ export default function SettingsClient() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">Employee OT rates and salary adjustments</p>
+          <p className="page-subtitle">
+            {isAdmin
+              ? "Account password, employee OT rates, and salary adjustments"
+              : "Account password"}
+          </p>
         </div>
       </div>
 
+      <ChangePasswordCard />
+
+      {isAdmin && (
+        <>
       <div className="card mb-6">
         <h2 className="text-lg font-bold mb-1">Overtime rate</h2>
         <p className="text-secondary text-sm mb-4">
@@ -443,7 +574,12 @@ export default function SettingsClient() {
       </div>
 
       <div className="card mb-6">
-        <h2 className="text-lg font-bold mb-4">Salary adjustment</h2>
+        <h2 className="text-lg font-bold mb-1">Salary adjustment</h2>
+        <p className="text-secondary text-sm mb-4">
+          {selectedOutlet
+            ? `For ${selectedOutlet.name} only · switch outlet in the header to change another`
+            : "Select an outlet in the header"}
+        </p>
         <form onSubmit={handleApply} style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 520 }}>
           {error && <div className="alert alert-danger">{error}</div>}
           {message && <div className="alert alert-success">{message}</div>}
@@ -452,7 +588,7 @@ export default function SettingsClient() {
             <label className="form-label">Target</label>
             <div className="segmented" role="group">
               <button type="button" className={`segmented__btn ${scope === "all" ? "active" : ""}`} onClick={() => setScope("all")}>
-                All employees
+                All in this outlet
               </button>
               <button type="button" className={`segmented__btn ${scope === "employee" ? "active" : ""}`} onClick={() => setScope("employee")}>
                 One employee
@@ -461,22 +597,13 @@ export default function SettingsClient() {
           </div>
 
           {scope === "employee" && (
-            <>
-              <Dropdown
-                value={outletId}
-                onChange={(v) => { setOutletId(v); setEmployeeId(""); }}
-                options={outletOptions}
-                label="Outlet"
-                placeholder="Select outlet"
-              />
-              <Dropdown
-                value={employeeId}
-                onChange={setEmployeeId}
-                options={empOptions}
-                label="Employee"
-                placeholder="Select employee"
-              />
-            </>
+            <Dropdown
+              value={employeeId}
+              onChange={setEmployeeId}
+              options={empOptions}
+              label="Employee"
+              placeholder={salaryOutletId ? "Select employee" : "Select outlet first"}
+            />
           )}
 
           <div className="form-group">
@@ -512,10 +639,17 @@ export default function SettingsClient() {
         </form>
       </div>
 
-      <h2 className="text-lg font-bold mb-4">Salary adjustment history</h2>
-      {!adjustments?.length ? (
+      <h2 className="text-lg font-bold mb-1">Salary adjustment history</h2>
+      <p className="text-secondary text-sm mb-4">
+        {selectedOutlet ? selectedOutlet.name : "Select an outlet"}
+      </p>
+      {!salaryOutletId ? (
         <div className="card text-center text-muted" style={{ padding: "2rem" }}>
-          No salary adjustments yet.
+          Select an outlet to view its salary adjustment history.
+        </div>
+      ) : !adjustments?.length ? (
+        <div className="card text-center text-muted" style={{ padding: "2rem" }}>
+          No salary adjustments yet for this outlet.
         </div>
       ) : (
         <div className="table-container">
@@ -575,6 +709,8 @@ export default function SettingsClient() {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </div>
   );

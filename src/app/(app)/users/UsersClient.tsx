@@ -38,6 +38,9 @@ export default function UsersClient() {
   const users = Array.isArray(data) ? data : [];
   const outlets = Array.isArray(outletsData) ? outletsData : [];
   const [showAdd, setShowAdd] = useState(false);
+  const [moveUser, setMoveUser] = useState<UserProfile | null>(null);
+  const [moveOutletId, setMoveOutletId] = useState("");
+  const [moving, setMoving] = useState(false);
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -47,6 +50,7 @@ export default function UsersClient() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [moveError, setMoveError] = useState("");
 
   function openAdd() {
     setFormData({
@@ -58,6 +62,39 @@ export default function UsersClient() {
     });
     setError("");
     setShowAdd(true);
+  }
+
+  function openMove(user: UserProfile) {
+    setMoveUser(user);
+    setMoveOutletId(user.outlet_id ?? outlets[0]?.id ?? "");
+    setMoveError("");
+  }
+
+  async function handleMoveUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!moveUser) return;
+    setMoveError("");
+    if (!moveOutletId) {
+      setMoveError("Select an outlet.");
+      return;
+    }
+    setMoving(true);
+    try {
+      const res = await fetch(`/api/users/${moveUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outlet_id: moveOutletId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMoveError(data.error || "Failed to move staff.");
+        return;
+      }
+      setMoveUser(null);
+      void mutate();
+    } finally {
+      setMoving(false);
+    }
   }
 
   async function handleCreateUser(e: React.FormEvent) {
@@ -116,7 +153,9 @@ export default function UsersClient() {
       <div className="page-header">
         <div>
           <h1 className="page-title">User Management</h1>
-          <p className="page-subtitle">Add and manage organization users (Admin only)</p>
+          <p className="page-subtitle">
+            Outlets are separate. Each staff login belongs to one outlet. To cover two outlets, create two staff accounts.
+          </p>
         </div>
         <button className="btn btn-primary" onClick={openAdd}>
           <Plus size={18} strokeWidth={2} />
@@ -174,9 +213,16 @@ export default function UsersClient() {
                     {new Date(u.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                   </td>
                   <td>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDeleteUser(u)}>
-                      Remove
-                    </button>
+                    <div className="flex gap-2 flex-wrap">
+                      {u.role === "staff" && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => openMove(u)}>
+                          Move outlet
+                        </button>
+                      )}
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDeleteUser(u)}>
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -258,6 +304,9 @@ export default function UsersClient() {
                 label="Assigned Outlet"
                 placeholder="Select outlet"
               />
+              <p className="text-muted text-xs mt-2">
+                Staff can only access this outlet. Need them on another outlet too? Add a second staff user there.
+              </p>
             </div>
           )}
 
@@ -265,6 +314,34 @@ export default function UsersClient() {
             <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? <><span className="spinner" />Creating…</> : "Create User"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={Boolean(moveUser)} onClose={() => setMoveUser(null)}>
+        <div className="modal-header">
+          <h2>Move staff outlet</h2>
+          <button className="btn btn-ghost btn-icon" onClick={() => setMoveUser(null)} aria-label="Close">
+            <X size={18} strokeWidth={2} />
+          </button>
+        </div>
+        <form onSubmit={handleMoveUser} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          {moveError && <div className="alert alert-danger">{moveError}</div>}
+          <p className="text-secondary text-sm">
+            Move <strong>{moveUser?.username}</strong> to a different outlet. They will only see that outlet after this.
+          </p>
+          <Dropdown
+            value={moveOutletId}
+            onChange={setMoveOutletId}
+            options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+            label="New outlet"
+            placeholder="Select outlet"
+          />
+          <div className="modal-footer" style={{ border: "none", padding: 0, margin: 0 }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setMoveUser(null)}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={moving}>
+              {moving ? <><span className="spinner" />Moving…</> : "Move"}
             </button>
           </div>
         </form>

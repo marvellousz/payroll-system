@@ -109,6 +109,7 @@ export async function PATCH(
         old_value: old,
         new_value: String(new_),
         highlighted: key === "monthly_salary" || key === "overtime_rate",
+        outlet_id: existing.outlet_id,
       });
     }
   }
@@ -139,6 +140,7 @@ export async function DELETE(
     field_changed: "deleted",
     old_value: existing.name,
     new_value: null,
+    outlet_id: existing.outlet_id,
   });
 
   return NextResponse.json({ success: true });

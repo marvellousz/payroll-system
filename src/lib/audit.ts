@@ -12,6 +12,7 @@ export interface AuditLogParams {
   old_value?: string | null;
   new_value?: string | null;
   highlighted?: boolean;
+  outlet_id?: string | null;
 }
 
 export async function logAudit(params: AuditLogParams) {
@@ -19,6 +20,7 @@ export async function logAudit(params: AuditLogParams) {
     await prisma.auditLog.create({
       data: {
         org_id: params.org_id,
+        outlet_id: params.outlet_id ?? null,
         user_id: params.user_id,
         entity_type: params.entity_type,
         entity_id: params.entity_id,

@@ -47,6 +47,8 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
   const { data, isLoading, mutate } = useSWR<
     Array<{ id: string; name: string; _count?: { employees?: number } }>
   >(swrKeys.outlets());
+  const { data: me } = useSWR<{ role: string; outlet_id?: string | null }>(swrKeys.me());
+  const isAdmin = me?.role === "admin";
 
   const outlets = useMemo(
     () =>
@@ -61,7 +63,18 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
   const [selectedOutletId, setSelectedOutletIdState] = useState("");
 
   useEffect(() => {
-    if (!outlets.length) return;
+    if (!outlets.length || !me) return;
+
+    // Staff: always locked to their assigned outlet (outlets are independent)
+    if (!isAdmin) {
+      const locked =
+        (me.outlet_id && outlets.some((o) => o.id === me.outlet_id)
+          ? me.outlet_id
+          : outlets[0]?.id) ?? "";
+      setSelectedOutletIdState(locked);
+      return;
+    }
+
     setSelectedOutletIdState((prev) => {
       const preferred = prev || readStoredOutletId();
       if (preferred && outlets.some((o) => o.id === preferred)) return preferred;
@@ -69,17 +82,22 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
       writeStoredOutletId(fallback);
       return fallback;
     });
-  }, [outlets]);
+  }, [outlets, me, isAdmin]);
 
   useEffect(() => {
     if (!selectedOutletId) return;
     prefetchOutletData(selectedOutletId);
   }, [selectedOutletId]);
 
-  const setSelectedOutlet = useCallback((id: string) => {
-    writeStoredOutletId(id);
-    setSelectedOutletIdState(id);
-  }, []);
+  const setSelectedOutlet = useCallback(
+    (id: string) => {
+      // Staff cannot switch outlets
+      if (me && me.role !== "admin") return;
+      writeStoredOutletId(id);
+      setSelectedOutletIdState(id);
+    },
+    [me]
+  );
 
   const refresh = useCallback(() => {
     void mutate();
@@ -93,7 +111,7 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
         selectedOutlet: outlets.find((o) => o.id === selectedOutletId) ?? null,
         setSelectedOutlet,
         refresh,
-        loading: isLoading && outlets.length === 0,
+        loading: (isLoading && outlets.length === 0) || !me,
       }}
     >
       {children}

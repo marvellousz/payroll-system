@@ -55,7 +55,6 @@ const navItems: NavItem[] = [
     label: "Settings",
     href: "/settings",
     icon: <Settings size={20} strokeWidth={2.5} />,
-    adminOnly: true,
   },
   {
     label: "Outlets",

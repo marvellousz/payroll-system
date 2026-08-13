@@ -57,6 +57,7 @@ export async function POST(request: Request) {
     field_changed: "created",
     old_value: null,
     new_value: `Outlet created: ${outlet.name}`,
+    outlet_id: outlet.id,
   });
 
   return NextResponse.json(outlet, { status: 201 });

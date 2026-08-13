@@ -56,8 +56,10 @@ export const swrKeys = {
   outletPayroll: (outletId: string, month: number, year: number, forPage: "dashboard" | "payroll" = "dashboard") =>
     `/api/outlets/${outletId}/payroll?month=${month}&year=${year}${forPage === "payroll" ? "&for=payroll" : ""}`,
   me: () => "/api/me",
-  salaryAdjustments: () => "/api/settings/salary-adjustments",
-  overtimeAdjustments: () => "/api/settings/overtime-rates",
+  salaryAdjustments: (outletId: string) =>
+    `/api/settings/salary-adjustments?outlet_id=${outletId}`,
+  overtimeAdjustments: (outletId: string) =>
+    `/api/settings/overtime-rates?outlet_id=${outletId}`,
   employeeOverview: (employeeId: string, month: number, year: number) =>
     `/api/employees/${employeeId}/overview?month=${month}&year=${year}`,
   attendance: (employeeId: string, month: number, year: number) =>

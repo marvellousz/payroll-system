@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { getAuthProfile, logAudit } from "@/lib/audit";
 import { computeEmployeePayroll, saveEmployeePayrollSummary } from "@/lib/payroll-server";
 
@@ -48,6 +49,11 @@ export async function POST(
   });
   if (!summary) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const emp = await prisma.employee.findFirst({
+    where: { id, outlet: { org_id: profile.org_id } },
+    select: { outlet_id: true },
+  });
+
   await logAudit({
     org_id: profile.org_id,
     user_id: profile.id,
@@ -61,6 +67,7 @@ export async function POST(
       total_pay: summary.total_pay,
       closing_balance: summary.closing_balance,
     }),
+    outlet_id: emp?.outlet_id ?? null,
   });
 
   return NextResponse.json(summary);

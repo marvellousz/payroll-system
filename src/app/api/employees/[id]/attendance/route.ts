@@ -175,6 +175,7 @@ export async function POST(
       field_changed: "status",
       old_value: existing?.status ?? null,
       new_value: `${employee.name} · ${dateLabel} · ${titleStatus(existing?.status)} → ${titleStatus(status)}`,
+      outlet_id: employee.outlet_id,
     });
   }
 
@@ -189,6 +190,7 @@ export async function POST(
       field_changed: "overtime_units",
       old_value: hadOt ? "on" : "off",
       new_value: `${employee.name} · ${dateLabel} · OT ${hadOt ? "on" : "off"} → ${hasOt ? "on" : "off"}`,
+      outlet_id: employee.outlet_id,
     });
   }
 

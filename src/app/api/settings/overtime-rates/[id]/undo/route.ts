@@ -73,6 +73,7 @@ export async function POST(
       old_value: adjustment.details,
       new_value: `Undid apply-month OT (${parsed.rates.length} employee${parsed.rates.length === 1 ? "" : "s"})`,
       highlighted: true,
+      outlet_id: adjustment.outlet_id,
     });
 
     return NextResponse.json({ success: true, kind: "apply_month" });
@@ -118,6 +119,7 @@ export async function POST(
     old_value: adjustment.details,
     new_value: `Undid OT rate change (${snapshot.length} employee${snapshot.length === 1 ? "" : "s"} restored)`,
     highlighted: true,
+    outlet_id: adjustment.outlet_id,
   });
 
   return NextResponse.json({ success: true });

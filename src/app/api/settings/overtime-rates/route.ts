@@ -9,14 +9,26 @@ function formatRateLine(name: string, from: number, to: number) {
   return `${name} ${from} → ${to}`;
 }
 
-// GET /api/settings/overtime-rates — recent OT rate changes (admin)
-export async function GET() {
+// GET /api/settings/overtime-rates?outlet_id= — recent OT rate changes (admin)
+export async function GET(request: Request) {
   const profile = await getAuthProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(profile)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const { searchParams } = new URL(request.url);
+  const outletId = searchParams.get("outlet_id");
+  if (!outletId) {
+    return NextResponse.json({ error: "outlet_id is required" }, { status: 400 });
+  }
+
+  const outlet = await prisma.outlet.findFirst({
+    where: { id: outletId, org_id: profile.org_id },
+    select: { id: true },
+  });
+  if (!outlet) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
+
   const rows = await prisma.overtimeRateAdjustment.findMany({
-    where: { org_id: profile.org_id },
+    where: { org_id: profile.org_id, outlet_id: outletId },
     orderBy: { created_at: "desc" },
     take: 20,
     include: { creator: { select: { username: true } } },
@@ -179,6 +191,7 @@ export async function POST(request: Request) {
         ? ` · applied to ${applyMonth}/${applyYear}`
         : " · standing rates only"),
     highlighted: true,
+    outlet_id: resolvedOutletId,
   });
 
   return NextResponse.json(

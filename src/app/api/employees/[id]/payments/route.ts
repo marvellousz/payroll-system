@@ -103,6 +103,7 @@ export async function POST(
     field_changed: paymentType,
     old_value: null,
     new_value: label,
+    outlet_id: employee.outlet_id,
   });
 
   return NextResponse.json(payment, { status: 201 });

@@ -114,6 +114,7 @@ export async function POST(request: Request) {
     old_value: null,
     new_value: details.replace(/\n/g, "; "),
     highlighted: true,
+    outlet_id: outletId,
   });
 
   return NextResponse.json(

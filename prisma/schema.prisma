@@ -95,6 +95,9 @@ model Outlet {
   org       Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
   employees Employee[]
   profiles  Profile[]
+  salary_adjustments SalaryAdjustment[]
+  overtime_adjustments OvertimeRateAdjustment[]
+  audit_logs AuditLog[]
 
   @@index([org_id])
 }
@@ -189,6 +192,7 @@ model SalaryPayment {
 model SalaryAdjustment {
   id          String          @id @default(uuid())
   org_id      String
+  outlet_id   String?
   scope       AdjustmentScope
   employee_id String?
   mode        AdjustmentMode
@@ -199,9 +203,11 @@ model SalaryAdjustment {
   undone_at   DateTime?
 
   org     Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  outlet  Outlet?      @relation(fields: [outlet_id], references: [id], onDelete: SetNull)
   creator Profile      @relation(fields: [created_by], references: [id])
 
   @@index([org_id, created_at])
+  @@index([outlet_id, created_at])
 }
 
 // ─── OvertimeRateAdjustment (batch OT rate change with undo) ──────────────────
@@ -219,9 +225,11 @@ model OvertimeRateAdjustment {
   undone_at    DateTime?
 
   org     Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  outlet  Outlet?      @relation(fields: [outlet_id], references: [id], onDelete: SetNull)
   creator Profile      @relation(fields: [created_by], references: [id])
 
   @@index([org_id, created_at])
+  @@index([outlet_id, created_at])
 }
 
 // ─── AuditLog ─────────────────────────────────────────────────────────────────
@@ -229,6 +237,7 @@ model OvertimeRateAdjustment {
 model AuditLog {
   id            String   @id @default(uuid())
   org_id        String
+  outlet_id     String?
   user_id       String
   entity_type   String   // e.g. "Employee", "AttendanceRecord", "Outlet"
   entity_id     String
@@ -238,10 +247,12 @@ model AuditLog {
   highlighted   Boolean  @default(false)
   timestamp     DateTime @default(now())
 
-  org  Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  user Profile      @relation(fields: [user_id], references: [id])
+  org    Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  outlet Outlet?      @relation(fields: [outlet_id], references: [id], onDelete: SetNull)
+  user   Profile      @relation(fields: [user_id], references: [id])
 
   @@index([org_id, timestamp])
+  @@index([outlet_id, timestamp])
   @@index([entity_type, entity_id])
   @@index([user_id])
 }

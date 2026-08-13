@@ -82,14 +82,26 @@ async function enrichAdjustments(
   });
 }
 
-// GET /api/settings/salary-adjustments — list recent adjustments
-export async function GET() {
+// GET /api/settings/salary-adjustments?outlet_id=
+export async function GET(request: Request) {
   const profile = await getAuthProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(profile)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const { searchParams } = new URL(request.url);
+  const outletId = searchParams.get("outlet_id");
+  if (!outletId) {
+    return NextResponse.json({ error: "outlet_id is required" }, { status: 400 });
+  }
+
+  const outlet = await prisma.outlet.findFirst({
+    where: { id: outletId, org_id: profile.org_id },
+    select: { id: true },
+  });
+  if (!outlet) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
+
   const adjustments = await prisma.salaryAdjustment.findMany({
-    where: { org_id: profile.org_id },
+    where: { org_id: profile.org_id, outlet_id: outletId },
     orderBy: { created_at: "desc" },
     take: 50,
     include: {
@@ -100,20 +112,24 @@ export async function GET() {
   return NextResponse.json(await enrichAdjustments(adjustments));
 }
 
-// POST /api/settings/salary-adjustments — apply % or fixed ₹ change
+// POST /api/settings/salary-adjustments — apply % or fixed ₹ change for one outlet
 export async function POST(request: Request) {
   const profile = await getAuthProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(profile)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { scope, employee_id, mode, value } = body as {
+  const { scope, employee_id, mode, value, outlet_id } = body as {
     scope?: string;
     employee_id?: string;
     mode?: string;
     value?: number;
+    outlet_id?: string;
   };
 
+  if (!outlet_id) {
+    return NextResponse.json({ error: "outlet_id is required" }, { status: 400 });
+  }
   if (scope !== "employee" && scope !== "all") {
     return NextResponse.json({ error: "scope must be employee or all" }, { status: 400 });
   }
@@ -127,24 +143,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "employee_id is required for employee scope" }, { status: 400 });
   }
 
+  const outlet = await prisma.outlet.findFirst({
+    where: { id: outlet_id, org_id: profile.org_id },
+    select: { id: true, name: true },
+  });
+  if (!outlet) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
+
   const amount = Number(value);
 
   const employees =
     scope === "all"
       ? await prisma.employee.findMany({
-          where: { outlet: { org_id: profile.org_id } },
+          where: { outlet_id: outlet.id },
           select: { id: true, name: true, monthly_salary: true },
         })
       : await prisma.employee.findMany({
           where: {
             id: employee_id,
-            outlet: { org_id: profile.org_id },
+            outlet_id: outlet.id,
           },
           select: { id: true, name: true, monthly_salary: true },
         });
 
   if (employees.length === 0) {
-    return NextResponse.json({ error: "No employees found" }, { status: 404 });
+    return NextResponse.json({ error: "No employees found in this outlet" }, { status: 404 });
   }
 
   const snapshot = employees.map((e) => {
@@ -170,6 +192,7 @@ export async function POST(request: Request) {
   const adjustment = await prisma.salaryAdjustment.create({
     data: {
       org_id: profile.org_id,
+      outlet_id: outlet.id,
       scope,
       employee_id: scope === "employee" ? employee_id! : null,
       mode,
@@ -191,8 +214,9 @@ export async function POST(request: Request) {
     entity_id: adjustment.id,
     field_changed: "apply",
     old_value: null,
-    new_value: `${detailLines.join("; ")} (${modeLabel})`,
+    new_value: `${outlet.name}: ${detailLines.join("; ")} (${modeLabel})`,
     highlighted: true,
+    outlet_id: outlet.id,
   });
 
   for (const row of snapshot) {
@@ -205,6 +229,7 @@ export async function POST(request: Request) {
       old_value: String(row.monthly_salary),
       new_value: String(row.new_salary),
       highlighted: true,
+      outlet_id: outlet.id,
     });
   }
 
