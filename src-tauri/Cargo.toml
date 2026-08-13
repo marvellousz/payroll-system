@@ -1,7 +1,7 @@
 [package]
 name = "payroll"
 version = "1.0.0"
-description = "Payroll & Attendance Platform Desktop App"
+description = "Payroll desktop app"
 authors = ["Payroll"]
 edition = "2021"
 

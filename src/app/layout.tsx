@@ -6,9 +6,8 @@ export const metadata: Metadata = {
     default: "Payroll",
     template: "%s | Payroll",
   },
-  description:
-    "Multi-outlet payroll and attendance management platform. Track employee attendance, calculate salaries, manage overtime, and view balance history.",
-  keywords: ["payroll", "attendance", "HR", "salary", "management"],
+  description: "Multi-outlet payroll and attendance management.",
+  applicationName: "Payroll",
 };
 
 export const viewport: Viewport = {

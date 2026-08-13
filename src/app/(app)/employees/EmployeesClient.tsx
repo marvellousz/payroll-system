@@ -198,7 +198,7 @@ export default function EmployeesClient() {
                     <div className="flex items-center gap-3 font-bold">
                       <div style={{
                         width: "36px", height: "36px", borderRadius: "50%",
-                        background: "#3B82F6", color: "#FFFFFF",
+                        background: "var(--color-primary)", color: "#FFFBF8",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontWeight: 800, fontSize: "0.9375rem", flexShrink: 0,
                       }}>

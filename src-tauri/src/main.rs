@@ -138,7 +138,7 @@ fn main() {
                     "main",
                     WebviewUrl::External("http://localhost:3000".parse().unwrap()),
                 )
-                .title("Payroll — Attendance Platform")
+                .title("Payroll")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(360.0, 640.0)
                 .center()
@@ -158,7 +158,7 @@ fn main() {
                 let url = format!("http://127.0.0.1:{port}");
                 let handle = app.handle().clone();
                 WebviewWindowBuilder::new(&handle, "main", WebviewUrl::External(url.parse().unwrap()))
-                    .title("Payroll — Attendance Platform")
+                    .title("Payroll")
                     .inner_size(1280.0, 800.0)
                     .min_inner_size(360.0, 640.0)
                     .center()

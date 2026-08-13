@@ -38,7 +38,11 @@ export async function invalidatePayrollCaches(outletId?: string, employeeId?: st
     (key) => {
       if (typeof key !== "string") return false;
       if (outletId && key.includes(`/api/outlets/${outletId}/payroll`)) return true;
-      if (employeeId && key.includes(`/api/employees/${employeeId}/`)) return true;
+      // Refresh employee overview/payroll — do NOT revalidate attendance
+      // (stale HTTP cache was overwriting optimistic calendar updates).
+      if (employeeId && key.includes(`/api/employees/${employeeId}/overview`)) return true;
+      if (employeeId && key.includes(`/api/employees/${employeeId}/payroll`)) return true;
+      if (employeeId && key.includes(`/api/employees/${employeeId}/payments`)) return true;
       return false;
     },
     undefined,

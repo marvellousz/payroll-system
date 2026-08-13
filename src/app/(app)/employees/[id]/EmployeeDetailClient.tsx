@@ -155,7 +155,7 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
           <div>
             <div className="text-muted text-xs uppercase font-semibold">Outlet OT Rate</div>
             <div className="text-xl font-bold mt-1">
-              {formatINR(Number(employee.outlet.overtime_rate))} / {employee.outlet.overtime_unit}
+              {formatINR(Number(employee.outlet.overtime_rate))} / OT day
             </div>
           </div>
         </div>
@@ -210,8 +210,8 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                             <span className="badge badge-neutral">Unmarked and absent</span>
                           )}
                         </td>
-                        <td className={rec?.overtime_units != null ? "amount-positive font-semibold" : "text-muted"}>
-                          {rec?.overtime_units != null ? `${rec.overtime_units} unit${rec.overtime_units === 1 ? "" : "s"}` : "—"}
+                        <td className={rec?.overtime_units != null && Number(rec.overtime_units) > 0 ? "amount-positive font-semibold" : "text-muted"}>
+                          {rec?.overtime_units != null && Number(rec.overtime_units) > 0 ? "OT" : "—"}
                         </td>
                       </tr>
                     );

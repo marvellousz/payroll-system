@@ -96,10 +96,13 @@ export function buildPayrollBreakdown(
   // Unmarked count as absent for the formula
   const days_absent = markedAbsent + days_unmarked;
 
-  const overtime_total_units = attendance.reduce(
-    (sum, r) => sum + (r.overtime_units ? Number(r.overtime_units) : 0),
-    0
-  );
+  // OT only on Present days; pay = OT days × outlet rate
+  const overtime_total_units = attendance.filter(
+    (r) =>
+      r.status === "present" &&
+      r.overtime_units != null &&
+      Number(r.overtime_units) > 0
+  ).length;
   const salary_given = netSalaryGiven(payments);
   const previous_balance = prevSummary ? Number(prevSummary.closing_balance) : 0;
 

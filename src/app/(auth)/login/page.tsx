@@ -59,11 +59,29 @@ export default function LoginPage() {
   return (
     <div style={{ width: "100%", maxWidth: "440px" }}>
       <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: 800, letterSpacing: "-0.03em", color: "#111827" }}>
+        <div
+          aria-hidden="true"
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            background: "var(--color-text-primary)",
+            color: "#FFFBF8",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 800,
+            fontSize: "1.75rem",
+            marginBottom: "0.85rem",
+          }}
+        >
+          P
+        </div>
+        <h1 style={{ color: "var(--color-text-primary)" }}>
           Payroll
         </h1>
         <p className="text-secondary text-sm font-medium" style={{ marginTop: "0.25rem" }}>
-          Sign in to access your dashboard
+          Sign in to your account
         </p>
       </div>
 

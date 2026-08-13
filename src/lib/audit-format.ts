@@ -47,20 +47,22 @@ export function formatAuditDisplay(log: {
   }
 
   if (entity === "AttendanceRecord") {
-    if (field === "status") {
+    if (field === "status" || field === "overtime_units") {
+      const raw = log.new_value ?? "";
+      // "Name · Day, date · change" — pull day/date into summary so it's visible
+      const parts = raw.split(" · ").map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 3) {
+        const [name, when, ...rest] = parts;
+        return {
+          summary: field === "overtime_units" ? `OT · ${when}` : `Attendance · ${when}`,
+          detail: `${name} · ${rest.join(" · ")}`,
+        };
+      }
       return {
-        summary: "Attendance updated",
-        detail: log.new_value?.includes("·")
-          ? log.new_value
+        summary: field === "overtime_units" ? "Overtime updated" : "Attendance updated",
+        detail: raw.includes("·")
+          ? raw
           : `${titleCase(String(log.old_value ?? "—"))} → ${titleCase(String(log.new_value ?? "—"))}`,
-      };
-    }
-    if (field === "overtime_units") {
-      return {
-        summary: "Overtime updated",
-        detail: log.new_value?.includes("·")
-          ? log.new_value
-          : `${log.old_value ?? "None"} → ${log.new_value ?? "None"}`,
       };
     }
   }

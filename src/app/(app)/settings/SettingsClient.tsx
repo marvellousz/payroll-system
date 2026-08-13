@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import Dropdown from "@/components/Dropdown";
+import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
 import { swrKeys } from "@/lib/swr-config";
 
@@ -26,11 +27,15 @@ interface OutletEmp {
 interface Outlet {
   id: string;
   name: string;
+  overtime_rate: string;
+  overtime_unit?: string;
+  _count?: { employees?: number };
 }
 
 export default function SettingsClient() {
   const { data: adjustments, mutate } = useSWR<Adjustment[]>(swrKeys.salaryAdjustments());
-  const { data: outlets } = useSWR<Outlet[]>(swrKeys.outlets());
+  const { data: outlets, mutate: mutateOutlets } = useSWR<Outlet[]>(swrKeys.outlets());
+  const { refresh: refreshOutlets } = useOutlets();
   const [outletId, setOutletId] = useState("");
   const { data: employees } = useSWR<OutletEmp[]>(
     outletId ? swrKeys.employees(outletId) : null
@@ -44,6 +49,9 @@ export default function SettingsClient() {
   const [undoing, setUndoing] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [otDrafts, setOtDrafts] = useState<Record<string, string>>({});
+  const [otSaving, setOtSaving] = useState<string | null>(null);
+  const [otMessage, setOtMessage] = useState("");
 
   const outletOptions = useMemo(
     () => (Array.isArray(outlets) ? outlets : []).map((o) => ({ value: o.id, label: o.name })),
@@ -111,13 +119,90 @@ export default function SettingsClient() {
     }
   }
 
+  function otRateValue(outlet: Outlet) {
+    return otDrafts[outlet.id] ?? String(outlet.overtime_rate ?? "0");
+  }
+
+  async function saveOtRate(outlet: Outlet) {
+    const raw = otRateValue(outlet);
+    const rate = Number(raw);
+    if (!Number.isFinite(rate) || rate < 0) {
+      setOtMessage("Enter a valid OT rate.");
+      return;
+    }
+    setOtSaving(outlet.id);
+    setOtMessage("");
+    try {
+      const res = await fetch(`/api/outlets/${outlet.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ overtime_rate: rate, overtime_unit: "day" }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOtMessage(body.error || "Failed to save OT rate");
+        return;
+      }
+      setOtDrafts((d) => {
+        const next = { ...d };
+        delete next[outlet.id];
+        return next;
+      });
+      void mutateOutlets();
+      refreshOutlets();
+      setOtMessage(`Saved OT rate for ${outlet.name}`);
+    } finally {
+      setOtSaving(null);
+    }
+  }
+
   return (
     <div className="page-content animate-fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">Adjust employee salaries by percent or amount, with undo</p>
+          <p className="page-subtitle">Outlet OT rates and salary adjustments</p>
         </div>
+      </div>
+
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold mb-2">Overtime rate (per outlet)</h2>
+        <p className="text-secondary text-sm mb-4">
+          Each calendar day marked <strong>Ot</strong> adds this amount. Different outlets can have different rates.
+        </p>
+        {otMessage && <div className="alert alert-success mb-4">{otMessage}</div>}
+        {!outlets?.length ? (
+          <p className="text-muted text-sm">No outlets yet. Create one under Outlets.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", maxWidth: 560 }}>
+            {(outlets ?? []).map((outlet) => (
+              <div key={outlet.id} className="flex gap-3 flex-wrap items-end">
+                <div className="form-group" style={{ flex: "1 1 160px", margin: 0 }}>
+                  <label className="form-label">{outlet.name}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={10}
+                    className="form-input"
+                    value={otRateValue(outlet)}
+                    onChange={(e) =>
+                      setOtDrafts((d) => ({ ...d, [outlet.id]: e.target.value }))
+                    }
+                    aria-label={`OT rate for ${outlet.name}`}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={otSaving === outlet.id}
+                  onClick={() => void saveOtRate(outlet)}
+                >
+                  {otSaving === outlet.id ? "Saving…" : "Save"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card mb-6">

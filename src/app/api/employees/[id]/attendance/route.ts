@@ -10,7 +10,28 @@ async function verifyEmployee(employeeId: string, orgId: string) {
 }
 
 function formatDay(date: Date) {
-  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function titleStatus(status: string | null | undefined) {
+  if (!status) return "Unmarked";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+/** Parse YYYY-MM-DD as UTC date (avoids timezone day shifts). */
+function parseAttendanceDate(date: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date).trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!y || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return new Date(Date.UTC(y, mo - 1, d));
 }
 
 // GET /api/employees/:id/attendance?month=&year=
@@ -30,8 +51,8 @@ export async function GET(
     return NextResponse.json({ error: "month and year are required" }, { status: 400 });
   }
 
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0, 23, 59, 59);
+  const startDate = new Date(Date.UTC(year, month - 1, 1));
+  const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59));
 
   const records = await prisma.attendanceRecord.findMany({
     where: {
@@ -43,7 +64,7 @@ export async function GET(
   });
 
   return NextResponse.json(records, {
-    headers: { "Cache-Control": "private, max-age=15, stale-while-revalidate=60" },
+    headers: { "Cache-Control": "private, no-store" },
   });
 }
 
@@ -66,17 +87,20 @@ export async function POST(
     return NextResponse.json({ error: "status must be present, absent, or half" }, { status: 400 });
   }
 
-  const allowedOt = [null, 0, 0.5, 1, 1.5, 2];
-  const otRaw = status === "absent" ? null : overtime_units ?? null;
-  const otUnits =
-    otRaw === null || otRaw === "" || otRaw === undefined
-      ? null
-      : Number(otRaw);
-  if (otUnits !== null && !allowedOt.includes(otUnits)) {
-    return NextResponse.json(
-      { error: "overtime_units must be one of: none, 0.5, 1, 1.5, 2" },
-      { status: 400 }
-    );
+  // OT only applies to Present days (binary on/off)
+  let otUnits: number | null = null;
+  if (status === "present") {
+    const otRaw = overtime_units ?? null;
+    if (otRaw !== null && otRaw !== "" && otRaw !== undefined) {
+      const n = Number(otRaw);
+      if (n > 0) otUnits = 1;
+      else if (n !== 0 && !Number.isNaN(n)) {
+        return NextResponse.json(
+          { error: "overtime is either on (1) or off" },
+          { status: 400 }
+        );
+      }
+    }
   }
 
   const employee = await verifyEmployee(id, profile.org_id);
@@ -90,7 +114,10 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const dateObj = new Date(date);
+  const dateObj = parseAttendanceDate(date);
+  if (!dateObj) {
+    return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+  }
 
   const existing = await prisma.attendanceRecord.findUnique({
     where: { employee_id_date: { employee_id: id, date: dateObj } },
@@ -119,21 +146,21 @@ export async function POST(
       entity_id: record.id,
       field_changed: "status",
       old_value: existing?.status ?? null,
-      new_value: `${employee.name} · ${dateLabel} · ${existing?.status ?? "unmarked"} → ${status}`,
+      new_value: `${employee.name} · ${dateLabel} · ${titleStatus(existing?.status)} → ${titleStatus(status)}`,
     });
   }
 
-  const oldOt = existing?.overtime_units != null ? String(existing.overtime_units) : null;
-  const newOt = otUnits != null ? String(otUnits) : null;
-  if (oldOt !== newOt) {
+  const hadOt = existing?.overtime_units != null && Number(existing.overtime_units) > 0;
+  const hasOt = otUnits != null && Number(otUnits) > 0;
+  if (hadOt !== hasOt) {
     void logAudit({
       org_id: profile.org_id,
       user_id: profile.id,
       entity_type: "AttendanceRecord",
       entity_id: record.id,
       field_changed: "overtime_units",
-      old_value: oldOt,
-      new_value: `${employee.name} · ${dateLabel} · OT ${oldOt ?? "None"} → ${newOt ?? "None"}`,
+      old_value: hadOt ? "on" : "off",
+      new_value: `${employee.name} · ${dateLabel} · OT ${hadOt ? "on" : "off"} → ${hasOt ? "on" : "off"}`,
     });
   }
 

@@ -140,7 +140,7 @@ export default function DashboardClient() {
                         <div
                           style={{
                             width: "44px", height: "44px", borderRadius: "50%",
-                            background: "#3B82F6", color: "#FFFFFF",
+                            background: "var(--color-primary)", color: "#FFFBF8",
                             display: "flex", alignItems: "center", justifyContent: "center",
                             fontWeight: 800, fontSize: "1.125rem", flexShrink: 0,
                           }}

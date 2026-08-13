@@ -20,13 +20,6 @@ interface AttendanceRecord {
 const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-const OT_OPTIONS = [
-  { value: "none", label: "None" },
-  { value: "0.5", label: "0.5" },
-  { value: "1", label: "1" },
-  { value: "1.5", label: "1.5" },
-  { value: "2", label: "2" },
-] as const;
 
 function recordsToMap(data: AttendanceRecord[] | undefined): Record<number, AttendanceRecord> {
   const map: Record<number, AttendanceRecord> = {};
@@ -64,8 +57,10 @@ export default function AttendanceClient() {
   );
 
   useEffect(() => {
+    // Don't clobber in-flight optimistic edits
+    if (savingDate) return;
     setRecords(recordsToMap(attendanceList));
-  }, [attendanceList]);
+  }, [attendanceList, savingDate]);
 
   async function saveAttendance(
     day: number,
@@ -77,55 +72,84 @@ export default function AttendanceClient() {
     setSavingDate(dateStr);
 
     const prevRec = records[day];
+    const nextOt = status === "absent" ? null : (overtime_units ?? null);
     const optimistic: AttendanceRecord = {
       id: prevRec?.id ?? `temp-${dateStr}`,
-      date: dateStr,
+      date: `${dateStr}T00:00:00.000Z`,
       status,
-      overtime_units: status === "absent" ? null : (overtime_units ?? null),
+      overtime_units: nextOt,
     };
     setRecords((prev) => ({ ...prev, [day]: optimistic }));
 
-    const res = await fetch(`/api/employees/${selectedEmployee}/attendance`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date: dateStr,
-        status,
-        overtime_units: status === "absent" ? null : (overtime_units ?? null),
-      }),
-    });
+    try {
+      const res = await fetch(`/api/employees/${selectedEmployee}/attendance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: dateStr,
+          status,
+          overtime_units: nextOt,
+        }),
+        cache: "no-store",
+      });
 
-    if (res.ok) {
-      const rec = await res.json();
-      const dayNum = new Date(rec.date).getUTCDate();
-      setRecords((prev) => ({ ...prev, [dayNum]: rec }));
-      await mutate(
-        (current) => {
-          const list = Array.isArray(current) ? [...current] : [];
-          const idx = list.findIndex((r) => new Date(r.date).getUTCDate() === dayNum);
-          if (idx >= 0) list[idx] = rec;
-          else list.push(rec);
-          return list;
-        },
-        { revalidate: false }
-      );
-      void invalidatePayrollCaches(selectedOutletId, selectedEmployee);
-    } else {
+      if (res.ok) {
+        const rec = (await res.json()) as AttendanceRecord;
+        const dayNum = new Date(rec.date).getUTCDate();
+        setRecords((prev) => ({ ...prev, [dayNum]: rec }));
+        await mutate(
+          (current) => {
+            const list = Array.isArray(current) ? [...current] : [];
+            const idx = list.findIndex((r) => new Date(r.date).getUTCDate() === dayNum);
+            if (idx >= 0) list[idx] = rec;
+            else list.push(rec);
+            return list;
+          },
+          { revalidate: false }
+        );
+        void invalidatePayrollCaches(selectedOutletId, selectedEmployee);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error("[attendance] save failed", res.status, err);
+        setRecords((prev) => {
+          const next = { ...prev };
+          if (prevRec) next[day] = prevRec;
+          else delete next[day];
+          return next;
+        });
+        alert(err.error || "Could not save attendance. Try again.");
+      }
+    } catch (e) {
+      console.error("[attendance] save error", e);
       setRecords((prev) => {
         const next = { ...prev };
         if (prevRec) next[day] = prevRec;
         else delete next[day];
         return next;
       });
+      alert("Could not save attendance. Check your connection.");
+    } finally {
+      setSavingDate(null);
     }
-    setSavingDate(null);
   }
 
-  async function updateOvertime(day: number, value: string) {
+  async function toggleOt(day: number) {
     const rec = records[day];
-    if (!rec || rec.status === "absent") return;
-    const ot = value === "none" || value === "" ? null : Number(value);
-    await saveAttendance(day, rec.status, ot);
+    // OT only allowed on Present days
+    if (rec?.status !== "present") return;
+    const hasOt = rec.overtime_units != null && Number(rec.overtime_units) > 0;
+    await saveAttendance(day, "present", hasOt ? null : 1);
+  }
+
+  async function toggleHalf(day: number) {
+    const rec = records[day];
+    if (rec?.status === "absent") return;
+    if (rec?.status === "half") {
+      await saveAttendance(day, "present", null);
+      return;
+    }
+    // Half day clears OT — overtime only applies to full present days
+    await saveAttendance(day, "half", null);
   }
 
   function prevMonth() {
@@ -194,7 +218,7 @@ export default function AttendanceClient() {
             <div className="stat-card__value text-amber">{halfCount}</div>
             <div className="stat-card__sub font-bold">count as 0.5</div>
           </div>
-          <div className="card-flat-muted" style={{ background: "#FEF2F2" }}>
+          <div className="card-flat-muted" style={{ background: "var(--color-danger-light)" }}>
             <div className="stat-card__label text-danger">Absent</div>
             <div className="stat-card__value text-danger">{absentCount}</div>
             <div className="stat-card__sub font-bold">days this month</div>
@@ -250,68 +274,68 @@ export default function AttendanceClient() {
                     if (isToday) dayClass += " today";
 
                     return (
-                      <div key={day} className={dayClass}>
-                        {isSaving && (
-                          <div className="attendance-day__saving">
-                            <span className="spinner" style={{ width: "12px", height: "12px" }} />
-                          </div>
-                        )}
-
+                      <div key={day} className={`${dayClass}${isSaving ? " is-saving" : ""}`}>
                         <span className="attendance-day__date">{day}</span>
 
-                        <div className="toggle-group attendance-day__toggles">
+                        <div className="toggle-group attendance-day__toggles" role="group" aria-label="Attendance">
                           <button
                             type="button"
                             className={`toggle-btn ${rec?.status === "present" ? "active-present" : ""}`}
                             onClick={() => {
-                              if (!isFuture) saveAttendance(day, "present", rec?.overtime_units ?? null);
+                              if (!isFuture) {
+                                // Keep OT only when already present; otherwise start clean
+                                const keepOt =
+                                  rec?.status === "present"
+                                    ? (rec.overtime_units ?? null)
+                                    : null;
+                                void saveAttendance(day, "present", keepOt);
+                              }
                             }}
                             disabled={isFuture || isSaving}
-                            title="Mark Present"
+                            title="Present"
                           >
                             P
                           </button>
                           <button
                             type="button"
-                            className={`toggle-btn ${rec?.status === "half" ? "active-half" : ""}`}
-                            onClick={() => {
-                              if (!isFuture) saveAttendance(day, "half", rec?.overtime_units ?? null);
-                            }}
-                            disabled={isFuture || isSaving}
-                            title="Mark Half Day"
-                          >
-                            H
-                          </button>
-                          <button
-                            type="button"
                             className={`toggle-btn ${rec?.status === "absent" ? "active-absent" : ""}`}
                             onClick={() => {
-                              if (!isFuture) saveAttendance(day, "absent", null);
+                              if (!isFuture) void saveAttendance(day, "absent", null);
                             }}
                             disabled={isFuture || isSaving}
-                            title="Mark Absent"
+                            title="Absent"
                           >
                             A
                           </button>
+                          <button
+                            type="button"
+                            className={`toggle-btn ${rec?.overtime_units != null && Number(rec.overtime_units) > 0 ? "active-ot" : ""}`}
+                            onClick={() => {
+                              if (!isFuture && !isSaving) void toggleOt(day);
+                            }}
+                            disabled={isFuture || isSaving || rec?.status !== "present"}
+                            title={
+                              rec?.status !== "present"
+                                ? "Mark Present first to set overtime"
+                                : rec?.overtime_units != null && Number(rec.overtime_units) > 0
+                                  ? "Overtime on (tap to clear)"
+                                  : "Mark overtime for this day"
+                            }
+                          >
+                            Ot
+                          </button>
+                          <button
+                            type="button"
+                            className={`toggle-btn ${rec?.status === "half" ? "active-half" : ""}`}
+                            onClick={() => {
+                              if (!isFuture && !isSaving) void toggleHalf(day);
+                            }}
+                            disabled={isFuture || isSaving || rec?.status === "absent"}
+                            title="Half day"
+                          >
+                            H
+                          </button>
                         </div>
-
-                        {(rec?.status === "present" || rec?.status === "half") && (
-                          <div className="attendance-ot-dropdown">
-                            <Dropdown
-                              variant="form"
-                              value={
-                                rec.overtime_units != null
-                                  ? String(rec.overtime_units)
-                                  : "none"
-                              }
-                              onChange={(v) => {
-                                if (!isSaving) void updateOvertime(day, v);
-                              }}
-                              options={OT_OPTIONS}
-                              placeholder="OT"
-                            />
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -326,17 +350,20 @@ export default function AttendanceClient() {
               </span>
               <span className="flex items-center gap-2 text-xs font-bold">
                 <span className="attendance-swatch attendance-swatch--present" />
-                Present (P)
-              </span>
-              <span className="flex items-center gap-2 text-xs font-bold">
-                <span className="attendance-swatch attendance-swatch--half" />
-                Half (H)
+                P Present
               </span>
               <span className="flex items-center gap-2 text-xs font-bold">
                 <span className="attendance-swatch attendance-swatch--absent" />
-                Absent (A)
+                A Absent
               </span>
-              <span className="text-xs font-medium" style={{ color: "#6B5344" }}>OT = selectable units</span>
+              <span className="flex items-center gap-2 text-xs font-bold">
+                <span className="attendance-swatch" style={{ background: "#7A9EBF", borderColor: "#7A9EBF" }} />
+                Ot = overtime (only with Present)
+              </span>
+              <span className="flex items-center gap-2 text-xs font-bold">
+                <span className="attendance-swatch attendance-swatch--half" />
+                H Half
+              </span>
             </div>
           </div>
         )

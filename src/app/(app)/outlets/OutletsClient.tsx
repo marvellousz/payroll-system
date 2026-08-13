@@ -3,7 +3,6 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { Plus, X, Building2 } from "lucide-react";
-import Dropdown from "@/components/Dropdown";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
 import { swrKeys } from "@/lib/swr-config";
@@ -37,13 +36,13 @@ export default function OutletsClient() {
   const [formData, setFormData] = useState({
     name: "",
     overtime_rate: "0",
-    overtime_unit: "hour" as "hour" | "day" | "fixed",
+    overtime_unit: "day" as "hour" | "day" | "fixed",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   function openAdd() {
-    setFormData({ name: "", overtime_rate: "0", overtime_unit: "hour" });
+    setFormData({ name: "", overtime_rate: "0", overtime_unit: "day" });
     setError("");
     setShowAdd(true);
   }
@@ -73,7 +72,7 @@ export default function OutletsClient() {
           body: JSON.stringify({
             name: formData.name,
             overtime_rate: Number(formData.overtime_rate),
-            overtime_unit: formData.overtime_unit,
+            overtime_unit: "day",
           }),
         });
         if (!res.ok) { const d = await res.json(); setError(d.error); return; }
@@ -86,7 +85,7 @@ export default function OutletsClient() {
           body: JSON.stringify({
             name: formData.name,
             overtime_rate: Number(formData.overtime_rate),
-            overtime_unit: formData.overtime_unit,
+            overtime_unit: "day",
           }),
         });
         if (!res.ok) { const d = await res.json(); setError(d.error); return; }
@@ -116,7 +115,7 @@ export default function OutletsClient() {
         />
       </div>
       <div className="form-group">
-        <label className="form-label" htmlFor="ot-rate">Overtime Rate (₹)</label>
+        <label className="form-label" htmlFor="ot-rate">OT rate per day (₹)</label>
         <input
           id="ot-rate"
           type="number"
@@ -124,23 +123,12 @@ export default function OutletsClient() {
           step={10}
           className="form-input"
           value={formData.overtime_rate}
-          onChange={(e) => setFormData((f) => ({ ...f, overtime_rate: e.target.value }))}
+          onChange={(e) => setFormData((f) => ({ ...f, overtime_rate: e.target.value, overtime_unit: "day" }))}
           required
         />
-        <span className="form-hint">Rate per overtime unit applied to all employees in this outlet.</span>
-      </div>
-      <div className="form-group">
-        <label className="form-label" htmlFor="ot-unit">Overtime Unit</label>
-        <Dropdown
-          value={formData.overtime_unit}
-          onChange={(v) => setFormData((f) => ({ ...f, overtime_unit: v }))}
-          options={[
-            { value: "hour", label: "Per Hour" },
-            { value: "day", label: "Per Day" },
-            { value: "fixed", label: "Fixed" },
-          ]}
-          label="Overtime Unit"
-        />
+        <span className="form-hint">
+          Per-outlet overtime pay. Each calendar day marked Ot adds this amount (e.g. ₹1000 × 2 OT days = ₹2000).
+        </span>
       </div>
       <div className="modal-footer" style={{ border: "none", padding: 0, margin: 0, marginTop: "0.5rem" }}>
         <button className="btn btn-secondary" onClick={() => { setShowAdd(false); setEditOutlet(null); }}>Cancel</button>
@@ -197,12 +185,8 @@ export default function OutletsClient() {
 
               <div style={{ background: "var(--color-surface-2)", borderRadius: "var(--radius-md)", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-secondary">Overtime Rate:</span>
+                  <span className="text-secondary">OT rate / day:</span>
                   <span className="font-semibold">{formatINR(Number(outlet.overtime_rate))}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-secondary">Overtime Unit:</span>
-                  <span className="badge badge-accent" style={{ textTransform: "capitalize" }}>{outlet.overtime_unit}</span>
                 </div>
               </div>
             </div>

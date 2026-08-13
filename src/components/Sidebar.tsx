@@ -104,6 +104,7 @@ export default function Sidebar({ isOpen, onClose, role, username }: SidebarProp
       <nav className={`sidebar ${isOpen ? "open" : ""}`} aria-label="Main navigation">
         {/* Brand */}
         <Link href={role === "admin" ? "/dashboard" : "/employees"} className="sidebar__logo" onClick={onClose}>
+          <div className="sidebar__logo-mark" aria-hidden="true">P</div>
           <div className="sidebar__logo-text">Payroll</div>
         </Link>
 
@@ -133,19 +134,16 @@ export default function Sidebar({ isOpen, onClose, role, username }: SidebarProp
         <div className="sidebar__footer">
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.5rem 0.25rem", marginBottom: "0.5rem" }}>
             <div
-              style={{
-                width: "36px", height: "36px", borderRadius: "50%",
-                background: "#3B82F6", display: "flex", alignItems: "center", justifyContent: "center",
-                fontWeight: 800, color: "#FFFFFF", fontSize: "0.9375rem", flexShrink: 0,
-              }}
+              className="sidebar__user-avatar"
+              aria-hidden="true"
             >
               {username.charAt(0).toUpperCase()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "#FFFFFF" }} className="truncate">
+              <div className="sidebar__user-name truncate">
                 {username}
               </div>
-              <div style={{ fontSize: "0.75rem", color: "#9CA3AF", textTransform: "capitalize", fontWeight: 600 }}>
+              <div className="sidebar__user-role">
                 {role}
               </div>
             </div>
@@ -153,8 +151,7 @@ export default function Sidebar({ isOpen, onClose, role, username }: SidebarProp
 
           <button
             onClick={handleSignOut}
-            className="sidebar__link"
-            style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}
+            className="sidebar__link sidebar__link--signout"
           >
             <LogOut size={20} strokeWidth={2.5} />
             Sign Out

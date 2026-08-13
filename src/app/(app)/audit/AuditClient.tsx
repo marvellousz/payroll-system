@@ -186,7 +186,9 @@ export default function AuditClient() {
                         <span className="font-semibold text-sm">{display.summary}</span>
                         <div className="text-muted text-xs mt-1">{log.entity_type}</div>
                       </td>
-                      <td className="text-sm">{display.detail}</td>
+                      <td className="text-sm" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                        {display.detail}
+                      </td>
                     </tr>
                   );
                 })}

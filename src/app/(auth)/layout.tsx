@@ -22,7 +22,6 @@ export default function AuthLayout({
         overflow: "hidden",
       }}
     >
-      {/* Flat geometric background decoration — no gradients, low-opacity solids */}
       <div
         aria-hidden="true"
         style={{
@@ -32,8 +31,8 @@ export default function AuthLayout({
           width: "28rem",
           height: "28rem",
           borderRadius: "50%",
-          background: "var(--color-primary)",
-          opacity: 0.08,
+          background: "var(--color-surface-3)",
+          opacity: 0.85,
         }}
       />
       <div
@@ -45,21 +44,21 @@ export default function AuthLayout({
           width: "26rem",
           height: "26rem",
           borderRadius: "50%",
-          background: "var(--color-secondary)",
-          opacity: 0.08,
+          background: "var(--color-primary)",
+          opacity: 0.18,
         }}
       />
       <div
         aria-hidden="true"
         style={{
           position: "absolute",
-          top: "18%",
-          left: "-5rem",
+          top: "22%",
+          left: "-4rem",
           width: "14rem",
           height: "14rem",
-          transform: "rotate(45deg)",
-          background: "var(--color-accent)",
-          opacity: 0.08,
+          borderRadius: "50%",
+          background: "var(--color-accent-light)",
+          opacity: 0.9,
         }}
       />
 

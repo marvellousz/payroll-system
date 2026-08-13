@@ -221,7 +221,7 @@ export default function PayrollClient() {
                       <div className="payroll-line">
                         <span className="text-secondary text-sm">Overtime Pay
                           <span className="text-muted" style={{ fontSize: "0.75rem", display: "block" }}>
-                            {p.overtime_total_units} units × {formatINR(p.overtime_rate_snapshot)}
+                            {p.overtime_total_units} OT day{p.overtime_total_units === 1 ? "" : "s"} × {formatINR(p.overtime_rate_snapshot)}/day
                           </span>
                         </span>
                         <span className="payroll-line__amount">{formatINR(p.overtime_pay)}</span>
