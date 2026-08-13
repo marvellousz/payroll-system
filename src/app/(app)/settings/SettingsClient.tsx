@@ -76,9 +76,9 @@ export default function SettingsClient() {
 
   const [otDrafts, setOtDrafts] = useState<Record<string, string>>({});
   const [otSaving, setOtSaving] = useState(false);
+  const [otApplyingMonth, setOtApplyingMonth] = useState(false);
   const [otMessage, setOtMessage] = useState("");
   const [otError, setOtError] = useState("");
-  const [applyCurrentMonth, setApplyCurrentMonth] = useState(false);
 
   const now = new Date();
   const currentMonthLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
@@ -170,7 +170,7 @@ export default function SettingsClient() {
     return Number(emp.overtime_rate ?? 0);
   }
 
-  async function saveAllOtRates() {
+  async function saveAllOtRates(applyToCurrentMonth: boolean) {
     if (!otOutletId || !otEmployees?.length) return;
     setOtError("");
     setOtMessage("");
@@ -195,6 +195,7 @@ export default function SettingsClient() {
     }
 
     setOtSaving(true);
+    setOtApplyingMonth(applyToCurrentMonth);
     try {
       const res = await fetch("/api/settings/overtime-rates", {
         method: "POST",
@@ -202,7 +203,7 @@ export default function SettingsClient() {
         body: JSON.stringify({
           outlet_id: otOutletId,
           rates,
-          apply_current_month: applyCurrentMonth,
+          apply_current_month: applyToCurrentMonth,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -211,7 +212,6 @@ export default function SettingsClient() {
         return;
       }
       setOtDrafts({});
-      setApplyCurrentMonth(false);
       void mutateOtEmployees();
       void mutateOtAdj();
       void invalidatePayrollCaches(otOutletId);
@@ -221,12 +221,13 @@ export default function SettingsClient() {
           )
         : [];
       setOtMessage(
-        applyCurrentMonth
+        applyToCurrentMonth
           ? `Saved · applied to ${currentMonthLabel}\n${lines.join("\n")}`
           : `Saved standing OT rates\n${lines.join("\n")}`
       );
     } finally {
       setOtSaving(false);
+      setOtApplyingMonth(false);
     }
   }
 
@@ -280,23 +281,24 @@ export default function SettingsClient() {
         ) : (
           <>
             <div
-              className="mb-5"
+              className="mb-4"
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "0.65rem",
-                maxWidth: 360,
+                gap: "0.5rem",
+                width: "max-content",
+                maxWidth: "100%",
               }}
             >
               {otEmployees.map((emp) => (
                 <div
                   key={emp.id}
                   className="flex items-center gap-3"
-                  style={{ minHeight: 44 }}
+                  style={{ minHeight: 36 }}
                 >
                   <span
-                    className="font-bold truncate"
-                    style={{ flex: "1 1 auto", minWidth: 0 }}
+                    className="font-bold"
+                    style={{ minWidth: "7rem", maxWidth: "10rem" }}
                     title={emp.name}
                   >
                     {emp.name}
@@ -312,8 +314,9 @@ export default function SettingsClient() {
                     }
                     aria-label={`OT rate for ${emp.name}`}
                     style={{
-                      width: 110,
-                      minHeight: 40,
+                      width: 88,
+                      minHeight: 36,
+                      padding: "0.35rem 0.5rem",
                       fontVariantNumeric: "tabular-nums",
                       fontWeight: 700,
                       textAlign: "right",
@@ -324,23 +327,23 @@ export default function SettingsClient() {
             </div>
 
             <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.85rem",
-                maxWidth: 360,
-              }}
+              className="flex items-center gap-2 flex-wrap"
+              style={{ marginTop: "0.25rem" }}
             >
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
                 disabled={otSaving}
-                onClick={() => void saveAllOtRates()}
-                style={{ alignSelf: "flex-start" }}
+                onClick={() => void saveAllOtRates(false)}
+                style={{
+                  minHeight: 34,
+                  padding: "0.35rem 0.9rem",
+                  width: "auto",
+                }}
               >
-                {otSaving ? (
+                {otSaving && !otApplyingMonth ? (
                   <>
-                    <span className="spinner" />
+                    <span className="spinner" style={{ width: 14, height: 14 }} />
                     Saving…
                   </>
                 ) : (
@@ -348,17 +351,27 @@ export default function SettingsClient() {
                 )}
               </button>
 
-              <label
-                className="flex items-center gap-2 font-semibold text-sm"
-                style={{ cursor: "pointer" }}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={otSaving}
+                onClick={() => void saveAllOtRates(true)}
+                style={{
+                  minHeight: 34,
+                  padding: "0.35rem 0.9rem",
+                  width: "auto",
+                }}
+                title={`Also recalculate OT pay for ${currentMonthLabel}`}
               >
-                <input
-                  type="checkbox"
-                  checked={applyCurrentMonth}
-                  onChange={(e) => setApplyCurrentMonth(e.target.checked)}
-                />
-                Apply new OT rates for the current month
-              </label>
+                {otSaving && otApplyingMonth ? (
+                  <>
+                    <span className="spinner" style={{ width: 14, height: 14 }} />
+                    Applying…
+                  </>
+                ) : (
+                  "Apply new OT rates for the current month"
+                )}
+              </button>
             </div>
           </>
         )}
