@@ -98,6 +98,23 @@ export default function OutletsClient() {
     }
   }
 
+  async function handleDelete(outlet: Outlet) {
+    const count = outlet._count?.employees ?? 0;
+    const extra =
+      count > 0
+        ? ` This will also delete ${count} employee${count === 1 ? "" : "s"} and their attendance/payroll. Staff assigned here will need a new outlet.`
+        : " Staff assigned here will need a new outlet.";
+    if (!confirm(`Delete outlet "${outlet.name}"?${extra} This cannot be undone.`)) return;
+    const res = await fetch(`/api/outlets/${outlet.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error || "Failed to delete outlet.");
+      return;
+    }
+    refreshOutlets();
+    void mutate();
+  }
+
   const FormContent = (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       {error && <div className="alert alert-danger">{error}</div>}
@@ -179,6 +196,9 @@ export default function OutletsClient() {
                 <div className="card-header-row__actions">
                   <button className="btn btn-secondary btn-sm" onClick={() => openEdit(outlet)}>
                     Edit Settings
+                  </button>
+                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(outlet)}>
+                    Delete
                   </button>
                 </div>
               </div>

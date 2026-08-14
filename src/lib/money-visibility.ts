@@ -1,16 +1,20 @@
 import { isAdmin } from "@/lib/audit";
 
-/** Staff never see salary / ₹ amounts. Admin always can. */
+/** Admin always sees money. */
 export function canViewMoney(profile: { role: string } | null | undefined) {
   return isAdmin(profile);
 }
 
-/** True when money must be masked for this viewer (staff always). */
+/**
+ * Staff: hide ₹ only when admin marked this employee salary_hidden.
+ * Admin: never hide.
+ */
 export function shouldHideEmployeeMoney(
   profile: { role: string } | null | undefined,
-  _salaryHidden?: boolean | null
+  salaryHidden?: boolean | null
 ) {
-  return !canViewMoney(profile);
+  if (canViewMoney(profile)) return false;
+  return Boolean(salaryHidden);
 }
 
 const MONEY_FIELDS = new Set([

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canAccessOutlet, getAuthProfile, logAudit } from "@/lib/audit";
-import { canViewMoney } from "@/lib/money-visibility";
+import { shouldHideEmployeeMoney } from "@/lib/money-visibility";
 
 async function getEmployee(id: string, orgId: string) {
   return prisma.employee.findFirst({
@@ -30,8 +30,8 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Staff: never see salary figures
-  if (!canViewMoney(profile)) {
+  // Staff: hide salary figures only when admin marked salary_hidden
+  if (shouldHideEmployeeMoney(profile, employee.salary_hidden)) {
     return NextResponse.json({
       ...employee,
       monthly_salary: null,

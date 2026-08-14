@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAuthProfile, isAdmin } from "@/lib/audit";
+import { getAuthProfile } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function HomePage() {
@@ -11,5 +11,5 @@ export default async function HomePage() {
   if (!user) redirect("/login");
 
   const profile = await getAuthProfile();
-  redirect(profile && isAdmin(profile) ? "/dashboard" : "/employees");
+  redirect(profile ? "/dashboard" : "/login");
 }

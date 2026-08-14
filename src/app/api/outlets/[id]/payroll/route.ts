@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { canAccessOutlet, getAuthProfile } from "@/lib/audit";
-import { canViewMoney } from "@/lib/money-visibility";
+import { canViewMoney, shouldHideEmployeeMoney } from "@/lib/money-visibility";
 import { computeOutletPayroll, type PayrollBreakdown } from "@/lib/payroll-server";
 
 function maskPayrollRow(row: PayrollBreakdown): PayrollBreakdown & { salary_masked: true } {
@@ -18,7 +18,7 @@ function maskPayrollRow(row: PayrollBreakdown): PayrollBreakdown & { salary_mask
   };
 }
 
-// GET /api/outlets/:id/payroll?month=&year=
+// GET /api/outlets/:id/payroll?month=&year=&for=payroll
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -34,6 +34,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const month = Number(searchParams.get("month"));
   const year = Number(searchParams.get("year"));
+  const forPayrollPage = searchParams.get("for") === "payroll";
 
   if (!month || !year) {
     return NextResponse.json({ error: "month and year are required" }, { status: 400 });
@@ -44,25 +45,27 @@ export async function GET(
   });
   if (!result) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
 
-  const showMoney = canViewMoney(profile);
   const employees = result.employees;
 
-  const payroll: Record<string, PayrollBreakdown | (PayrollBreakdown & { salary_masked: true })> = {};
+  const payroll: Record<string, PayrollBreakdown & { salary_masked: boolean }> = {};
   for (const emp of employees) {
     const row = result.payroll[emp.id];
     if (!row) continue;
-    payroll[emp.id] = showMoney ? row : maskPayrollRow(row);
+    // Dashboard: staff never see amounts. Payroll: hide only if salary_hidden.
+    const hide = !canViewMoney(profile) && (!forPayrollPage || shouldHideEmployeeMoney(profile, emp.salary_hidden));
+    payroll[emp.id] = hide ? maskPayrollRow(row) : { ...row, salary_masked: false };
   }
 
   const safeEmployees = employees.map((e) => {
-    if (!showMoney) {
+    const hide = !canViewMoney(profile) && (!forPayrollPage || shouldHideEmployeeMoney(profile, e.salary_hidden));
+    if (hide) {
       return { ...e, monthly_salary: "0", overtime_rate: "0", salary_masked: true };
     }
     return { ...e, salary_masked: false };
   });
 
   return NextResponse.json(
-    { employees: safeEmployees, payroll, money_hidden: !showMoney },
+    { employees: safeEmployees, payroll, money_hidden: false },
     { headers: { "Cache-Control": "private, max-age=20, stale-while-revalidate=90" } }
   );
 }

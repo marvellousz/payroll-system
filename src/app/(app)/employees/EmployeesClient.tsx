@@ -145,9 +145,14 @@ export default function EmployeesClient() {
           onChange={(e) => setFormData((f) => ({ ...f, paid_leave_days: e.target.value }))} />
       </div>
       {isAdmin && (
-        <p className="text-muted text-sm" style={{ marginTop: "-0.5rem" }}>
-          Staff accounts never see salary or other money amounts.
-        </p>
+        <label className="flex items-center gap-2" style={{ cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={formData.salary_hidden}
+            onChange={(e) => setFormData((f) => ({ ...f, salary_hidden: e.target.checked }))}
+          />
+          <span className="text-sm">Hide salary from staff on Payroll</span>
+        </label>
       )}
       <div className="modal-footer">
         <button className="btn btn-secondary" onClick={() => { setShowAdd(false); setEditEmployee(null); }}>Cancel</button>

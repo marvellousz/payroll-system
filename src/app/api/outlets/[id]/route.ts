@@ -66,3 +66,36 @@ export async function GET(
 
   return NextResponse.json(outlet);
 }
+
+// DELETE /api/outlets/:id — admin only; employees cascade, staff unassigned
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const profile = await getAuthProfile();
+  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (profile.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { id } = await params;
+  const existing = await prisma.outlet.findFirst({
+    where: { id, org_id: profile.org_id },
+    include: { _count: { select: { employees: true, profiles: true } } },
+  });
+  if (!existing) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
+
+  await prisma.outlet.delete({ where: { id } });
+
+  await logAudit({
+    org_id: profile.org_id,
+    user_id: profile.id,
+    entity_type: "Outlet",
+    entity_id: id,
+    field_changed: "deleted",
+    old_value: existing.name,
+    new_value: `${existing._count.employees} employees removed`,
+    highlighted: true,
+    outlet_id: null,
+  });
+
+  return NextResponse.json({ success: true });
+}

@@ -29,7 +29,6 @@ const navItems: NavItem[] = [
     label: "Dashboard",
     href: "/dashboard",
     icon: <LayoutDashboard size={20} strokeWidth={2.5} />,
-    adminOnly: true,
   },
   {
     label: "Employees",
@@ -105,7 +104,7 @@ export default function Sidebar({ isOpen, onClose, role, username, outletName }:
 
       <nav className={`sidebar ${isOpen ? "open" : ""}`} aria-label="Main navigation">
         {/* Brand */}
-        <Link href={role === "admin" ? "/dashboard" : "/employees"} className="sidebar__logo" onClick={onClose}>
+        <Link href="/dashboard" className="sidebar__logo" onClick={onClose}>
           <div className="sidebar__logo-mark" aria-hidden="true">P</div>
           <div className="sidebar__logo-text">Payroll</div>
         </Link>

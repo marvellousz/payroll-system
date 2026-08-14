@@ -166,6 +166,13 @@ h5 { font-size: 1rem; font-weight: 600; }
   padding: 1.5rem;
 }
 
+.card-flat-rose {
+  background: var(--color-danger-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+}
+
 /* ─── Buttons ────────────────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
@@ -373,9 +380,28 @@ h5 { font-size: 1rem; font-weight: 600; }
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   overflow-y: auto;
+  overflow-x: hidden;
   max-height: 18rem;
   z-index: 300;
   padding: 0.25rem;
+  overscroll-behavior: contain;
+  scrollbar-width: auto;
+  scrollbar-color: var(--color-border-strong) var(--color-surface-2);
+}
+.dropdown__menu::-webkit-scrollbar {
+  width: 12px;
+}
+.dropdown__menu::-webkit-scrollbar-track {
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+}
+.dropdown__menu::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-surface-2);
+}
+.dropdown__menu::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
 }
 .dropdown__menu--portal {
   position: fixed;
@@ -1261,6 +1287,139 @@ h5 { font-size: 1rem; font-weight: 600; }
 .amount-positive { color: var(--color-secondary); }
 .amount-negative { color: var(--color-danger); }
 
+.staff-dashboard-page {
+  padding-top: 1rem;
+}
+
+.staff-dashboard-shell {
+  max-width: 760px;
+  width: 100%;
+}
+
+.staff-dashboard-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 630px;
+  min-height: 56px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px;
+  padding: 0.25rem 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.staff-dashboard-month-label {
+  flex: 1;
+  text-align: center;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.staff-payroll-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 630px;
+}
+
+.staff-payroll-card {
+  background: rgba(240, 224, 214, 0.85);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 20px;
+  padding: 1.35rem 1.5rem 1rem;
+}
+
+.staff-payroll-card__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.staff-payroll-card__avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #C9927E;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.staff-payroll-card__name {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 2vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+  line-height: 1.1;
+}
+
+.staff-payroll-card__button {
+  display: block;
+  width: 100%;
+  background: rgba(224, 204, 193, 0.9);
+  border: 1px solid rgba(166, 124, 108, 0.2);
+  color: var(--color-text-primary);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 1.2rem;
+}
+
+.staff-payroll-card__button:hover {
+  background: rgba(224, 204, 193, 1);
+}
+
+.staff-payroll-card__section-label {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.4rem;
+}
+
+.staff-payroll-card__rows {
+  border-top: 1px solid rgba(166, 124, 108, 0.26);
+}
+
+.staff-payroll-card__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.95rem 0;
+  border-bottom: 1px solid rgba(166, 124, 108, 0.26);
+  font-size: 1.12rem;
+  color: var(--color-text-primary);
+}
+
+.staff-payroll-card__row span {
+  flex: 1;
+  color: var(--color-text-primary);
+}
+
+.staff-payroll-card__row strong {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--color-text-primary);
+}
+
+.staff-empty-state {
+  max-width: 620px;
+}
+
 /* ─── Segmented View Toggle ──────────────────────────────────────────────────── */
 .segmented {
   display: inline-flex;
@@ -1663,7 +1822,8 @@ h5 { font-size: 1rem; font-weight: 600; }
   .card-flat-emerald,
   .card-flat-muted,
   .card-flat-blue,
-  .card-flat-amber { padding: 1rem; }
+  .card-flat-amber,
+  .card-flat-rose { padding: 1rem; }
 
   .attendance-scroll__inner {
     min-width: 0;

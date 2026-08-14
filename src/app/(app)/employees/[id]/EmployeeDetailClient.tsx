@@ -73,9 +73,6 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
     money_hidden?: boolean;
   }>(swrKeys.employeeOverview(employeeId, month, year));
 
-  const { data: me } = useSWR<{ role: string }>(swrKeys.me());
-  const isAdmin = me?.role === "admin";
-
   const { data: attendanceData } = useSWR<AttendanceItem[]>(
     view === "full" ? swrKeys.attendance(employeeId, month, year) : null
   );
@@ -128,8 +125,7 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
     data?.money_hidden ||
       data?.salary_masked ||
       employee.salary_masked ||
-      payroll?.salary_masked ||
-      (!isAdmin && me != null)
+      payroll?.salary_masked
   );
 
   return (
@@ -257,6 +253,7 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                   <div className="payroll-line"><span className="text-secondary">Days Absent (incl. unmarked)</span><span className="font-bold">{payroll.days_absent}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Unmarked and absent</span><span className="font-bold">{payroll.days_unmarked ?? "—"}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Paid Leave</span><span className="font-bold">{payroll.paid_leave_days}d</span></div>
+                  <div className="payroll-line"><span className="text-secondary">Overtime Days</span><span className="font-bold">{payroll.overtime_total_units ?? 0}</span></div>
                   <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-bold">{payroll.payable_days}</span></div>
                   {!masked && (
                     <>
@@ -304,6 +301,7 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                 <div className="payroll-line"><span className="text-secondary">Days Absent (incl. unmarked)</span><span className="font-semibold">{payroll.days_absent}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Unmarked and absent</span><span className="font-semibold">{payroll.days_unmarked ?? "—"}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Paid Leave Days</span><span className="font-semibold">{payroll.paid_leave_days}</span></div>
+                <div className="payroll-line"><span className="text-secondary">Overtime Days</span><span className="font-semibold">{payroll.overtime_total_units ?? 0}</span></div>
                 <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-semibold">{payroll.payable_days}</span></div>
                 {!masked && (
                   <>

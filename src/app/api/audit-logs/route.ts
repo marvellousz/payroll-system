@@ -65,7 +65,20 @@ export async function GET(request: Request) {
     org_id: profile.org_id,
     outlet_id: allowedIds.length === 1 ? allowedIds[0] : { in: allowedIds },
   };
-  if (entity_type) where.entity_type = entity_type;
+  if (entity_type === "deleted") {
+    const deletedFields = { in: ["deleted", "removed", "deleted_range"] };
+    if (isAdmin(profile)) {
+      delete where.outlet_id;
+      where.OR = [
+        { outlet_id: { in: allowedIds }, field_changed: deletedFields },
+        { outlet_id: null, field_changed: deletedFields },
+      ];
+    } else {
+      where.field_changed = deletedFields;
+    }
+  } else if (entity_type) {
+    where.entity_type = entity_type;
+  }
   if (entity_id) where.entity_id = entity_id;
   if (user_id) where.user_id = user_id;
   if (date_from || date_to) {
@@ -75,7 +88,7 @@ export async function GET(request: Request) {
     };
   }
 
-  const [total, logs] = await Promise.all([
+  const [total, rawLogs] = await Promise.all([
     prisma.auditLog.count({ where }),
     prisma.auditLog.findMany({
       where,
@@ -89,9 +102,12 @@ export async function GET(request: Request) {
     }),
   ]);
 
+  const named = await attachEmployeeNames(rawLogs);
+  const logs = isAdmin(profile) ? named : named.map(redactAuditMoney);
+
   return NextResponse.json(
     {
-      logs: isAdmin(profile) ? logs : logs.map(redactAuditMoney),
+      logs,
       total,
       page,
       limit,
@@ -99,6 +115,103 @@ export async function GET(request: Request) {
     },
     { headers: { "Cache-Control": "private, max-age=10, stale-while-revalidate=30" } }
   );
+}
+
+function nameFromAttendanceText(value: string | null) {
+  if (!value) return null;
+  const part = value.split(" · ")[0]?.trim();
+  return part || null;
+}
+
+function nameFromPaymentText(value: string | null) {
+  if (!value) return null;
+  const m = value.match(/\(([^)]+)\)\s*$/);
+  return m?.[1]?.trim() || null;
+}
+
+function namesFromAdjustmentText(value: string | null) {
+  if (!value) return null;
+  // "Outlet: Name 100 → 110; Name2 200 → 220 (5%)"
+  const afterColon = value.includes(":") ? value.slice(value.indexOf(":") + 1) : value;
+  const withoutMode = afterColon.replace(/\s*\([^)]*\)\s*$/, "");
+  const names = withoutMode
+    .split(";")
+    .map((chunk) => chunk.trim().replace(/\s+[\d,]+(?:\.\d+)?\s*→.*$/, "").trim())
+    .filter(Boolean);
+  if (names.length === 0) return null;
+  return names.join(", ");
+}
+
+async function attachEmployeeNames<T extends {
+  entity_type: string;
+  entity_id: string;
+  field_changed: string | null;
+  old_value: string | null;
+  new_value: string | null;
+}>(logs: T[]): Promise<Array<T & { employee_name: string | null }>> {
+  const attendanceIds = logs.filter((l) => l.entity_type === "AttendanceRecord").map((l) => l.entity_id);
+  const payrollIds = logs.filter((l) => l.entity_type === "PayrollSummary").map((l) => l.entity_id);
+  const paymentIds = logs.filter((l) => l.entity_type === "SalaryPayment").map((l) => l.entity_id);
+  const directEmpIds = logs.filter((l) => l.entity_type === "Employee").map((l) => l.entity_id);
+
+  const [attendance, payrolls, payments] = await Promise.all([
+    attendanceIds.length
+      ? prisma.attendanceRecord.findMany({
+          where: { id: { in: attendanceIds } },
+          select: { id: true, employee_id: true },
+        })
+      : [],
+    payrollIds.length
+      ? prisma.payrollSummary.findMany({
+          where: { id: { in: payrollIds } },
+          select: { id: true, employee_id: true },
+        })
+      : [],
+    paymentIds.length
+      ? prisma.salaryPayment.findMany({
+          where: { id: { in: paymentIds } },
+          select: { id: true, employee_id: true },
+        })
+      : [],
+  ]);
+
+  const empIds = new Set(directEmpIds);
+  for (const r of attendance) empIds.add(r.employee_id);
+  for (const r of payrolls) empIds.add(r.employee_id);
+  for (const r of payments) empIds.add(r.employee_id);
+
+  const employees = empIds.size
+    ? await prisma.employee.findMany({
+        where: { id: { in: [...empIds] } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const nameByEmp = new Map(employees.map((e) => [e.id, e.name]));
+  const empByAttendance = new Map(attendance.map((r) => [r.id, r.employee_id]));
+  const empByPayroll = new Map(payrolls.map((r) => [r.id, r.employee_id]));
+  const empByPayment = new Map(payments.map((r) => [r.id, r.employee_id]));
+
+  return logs.map((log) => {
+    let employee_name: string | null = null;
+    if (log.entity_type === "Employee") {
+      employee_name =
+        nameByEmp.get(log.entity_id) ??
+        (log.field_changed === "deleted" ? log.old_value : null);
+    } else if (log.entity_type === "AttendanceRecord") {
+      const eid = empByAttendance.get(log.entity_id);
+      employee_name = (eid ? nameByEmp.get(eid) : null) ?? nameFromAttendanceText(log.new_value);
+    } else if (log.entity_type === "PayrollSummary") {
+      const eid = empByPayroll.get(log.entity_id);
+      employee_name = eid ? nameByEmp.get(eid) ?? null : null;
+    } else if (log.entity_type === "SalaryPayment") {
+      const eid = empByPayment.get(log.entity_id);
+      employee_name =
+        (eid ? nameByEmp.get(eid) : null) ?? nameFromPaymentText(log.new_value);
+    } else if (log.entity_type === "SalaryAdjustment" || log.entity_type === "OvertimeRateAdjustment") {
+      employee_name = namesFromAdjustmentText(log.new_value);
+    }
+    return { ...log, employee_name: employee_name || null };
+  });
 }
 
 function formatRangeDate(d: Date) {

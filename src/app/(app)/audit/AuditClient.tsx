@@ -17,6 +17,7 @@ interface AuditLogItem {
   new_value: string | null;
   highlighted?: boolean;
   timestamp: string;
+  employee_name?: string | null;
   user: {
     username: string;
     email: string;
@@ -192,8 +193,10 @@ export default function AuditClient() {
                 { value: "PayrollSummary", label: "Payroll" },
                 { value: "SalaryPayment", label: "Salary Payment" },
                 { value: "SalaryAdjustment", label: "Salary Adjustment" },
+                { value: "deleted", label: "Deleted" },
                 { value: "OvertimeRateAdjustment", label: "OT Rate" },
                 { value: "Outlet", label: "Outlet" },
+                { value: "Profile", label: "Users" },
                 { value: "AuditLog", label: "Audit meta" },
               ]}
               label="Entity Type"
@@ -298,6 +301,7 @@ export default function AuditClient() {
                   {allSelected && <th>Outlet</th>}
                   <th>Summary</th>
                   <th>Details</th>
+                  <th>Employee</th>
                 </tr>
               </thead>
               <tbody>
@@ -338,6 +342,9 @@ export default function AuditClient() {
                         style={{ whiteSpace: "normal", wordBreak: "break-word" }}
                       >
                         {display.detail}
+                      </td>
+                      <td className="text-sm font-medium">
+                        {log.employee_name || "—"}
                       </td>
                     </tr>
                   );

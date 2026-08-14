@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatINR } from "@/lib/payroll";
 import { invalidatePayrollCaches, swrKeys } from "@/lib/swr-config";
 import { prefetchOutletData } from "@/lib/prefetch";
+import PaymentModal from "@/components/PaymentModal";
 
 interface Employee {
   id: string;
@@ -28,87 +29,8 @@ interface PayrollData {
 const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
-function PaymentModal({ employee, month, year, onClose, onSuccess }: {
-  employee: Employee; month: number; year: number;
-  onClose: () => void; onSuccess: () => void;
-}) {
-  const [amount, setAmount] = useState("");
-  const [type, setType] = useState<"salary" | "repayment">("salary");
-  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!amount || Number(amount) <= 0) { setError("Enter a valid amount."); return; }
-    setSaving(true);
-    const res = await fetch(`/api/employees/${employee.id}/payments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        month,
-        year,
-        amount: Number(amount),
-        type,
-        paid_at: paidAt,
-      }),
-    });
-    setSaving(false);
-    if (res.ok) { onSuccess(); onClose(); }
-    else { const d = await res.json(); setError(d.error); }
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Record Payment</h2>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close">
-            <X size={18} strokeWidth={2.5} />
-          </button>
-        </div>
-        <p className="text-secondary text-sm mb-4">
-          For <strong>{employee.name}</strong> · {MONTHS[month-1]} {year}
-        </p>
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {error && <div className="alert alert-danger">{error}</div>}
-          <div className="form-group">
-            <label className="form-label">Type</label>
-            <div className="segmented" role="group">
-              <button type="button" className={`segmented__btn ${type === "salary" ? "active" : ""}`} onClick={() => setType("salary")}>
-                Salary payment
-              </button>
-              <button type="button" className={`segmented__btn ${type === "repayment" ? "active" : ""}`} onClick={() => setType("repayment")}>
-                Repayment received
-              </button>
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="payment-date">Date</label>
-            <input id="payment-date" type="date" className="form-input" value={paidAt}
-              onChange={(e) => setPaidAt(e.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="payment-amount">Amount (₹)</label>
-            <input id="payment-amount" type="number" className="form-input" min={1} step={100}
-              value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus required />
-          </div>
-          <div className="modal-footer" style={{ border: "none", padding: 0, margin: 0 }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? <><span className="spinner"/>Recording…</> : type === "repayment" ? "Record Repayment" : "Record Payment"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 export default function PayrollClient() {
   const { selectedOutletId } = useOutlets();
-  const { data: me } = useSWR<{ role: string }>(swrKeys.me());
-  const isAdmin = me?.role === "admin";
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -124,7 +46,7 @@ export default function PayrollClient() {
 
   const employees = data?.employees ?? [];
   const payrollMap = data?.payroll ?? {};
-  const moneyHidden = Boolean(data?.money_hidden) || (!isAdmin && me != null);
+  const moneyHidden = Boolean(data?.money_hidden);
   const showSkeleton = isLoading && !data;
 
   useEffect(() => {
@@ -218,11 +140,9 @@ export default function PayrollClient() {
                     <button className="btn btn-secondary btn-sm" onClick={() => setPaymentFor(emp)}>
                       + Record Payment / Repayment
                     </button>
-                    {isAdmin && (
-                      <button className="btn btn-secondary btn-sm" onClick={() => finalizePayroll(emp)} title="Save/finalize payroll summary">
-                        Save Summary
-                      </button>
-                    )}
+                    <button className="btn btn-secondary btn-sm" onClick={() => finalizePayroll(emp)} title="Save/finalize payroll summary">
+                      Save Summary
+                    </button>
                   </div>
                 </div>
 
@@ -237,6 +157,9 @@ export default function PayrollClient() {
                       <div className="payroll-line"><span className="text-secondary text-sm">Half Days</span><span>{p.days_half}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Days Absent (incl. unmarked)</span><span>{p.days_absent}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Paid Leave</span><span>{p.paid_leave_days} days</span></div>
+                      {!hideMoney && (
+                        <div className="payroll-line"><span className="text-secondary text-sm">Overtime Days</span><span>{p.overtime_total_units ?? 0}</span></div>
+                      )}
                       <div className="payroll-line"><span className="text-secondary text-sm">Payable Days</span><span>{p.payable_days}</span></div>
                       {!hideMoney && (
                         <>

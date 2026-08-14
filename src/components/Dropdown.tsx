@@ -28,7 +28,12 @@ export default function Dropdown<T extends string>({
 }: DropdownProps<T>) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -42,13 +47,24 @@ export default function Dropdown<T extends string>({
     const el = triggerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const width = variant === "header" ? Math.max(rect.width, 180) : rect.width;
-    // Keep menu on-screen horizontally
+    const width = variant === "header" ? Math.max(rect.width, 220) : rect.width;
     const left = Math.min(rect.left, Math.max(8, window.innerWidth - width - 8));
-    setMenuPos({
-      top: rect.bottom + 4,
-      left,
-      width,
+    const spaceBelow = window.innerHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+    const maxHeight = Math.min(320, Math.max(spaceBelow, spaceAbove, 160));
+    const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+    const top = openUp ? Math.max(8, rect.top - 4 - maxHeight) : rect.bottom + 4;
+    setMenuPos((prev) => {
+      if (
+        prev &&
+        prev.top === top &&
+        prev.left === left &&
+        prev.width === width &&
+        prev.maxHeight === maxHeight
+      ) {
+        return prev;
+      }
+      return { top, left, width, maxHeight };
     });
   }
 
@@ -63,7 +79,15 @@ export default function Dropdown<T extends string>({
   useEffect(() => {
     if (!open) return;
 
-    function onReposition() {
+    function onReposition(e?: Event) {
+      if (
+        e &&
+        menuRef.current &&
+        e.target instanceof Node &&
+        (e.target === menuRef.current || menuRef.current.contains(e.target))
+      ) {
+        return;
+      }
       updateMenuPosition();
     }
 
@@ -89,6 +113,24 @@ export default function Dropdown<T extends string>({
       window.removeEventListener("scroll", onReposition, true);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = menuRef.current;
+    if (!el) return;
+
+    function onWheel(e: WheelEvent) {
+      const menu = menuRef.current;
+      if (!menu) return;
+      e.stopPropagation();
+      if (menu.scrollHeight <= menu.clientHeight) return;
+      e.preventDefault();
+      menu.scrollTop += e.deltaY;
+    }
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [open, menuPos]);
 
   function openMenu(hint?: number) {
     if (options.length === 0) return;
@@ -169,10 +211,13 @@ export default function Dropdown<T extends string>({
         role="listbox"
         className="dropdown__menu dropdown__menu--portal"
         aria-label={label}
+        onWheel={(e) => e.stopPropagation()}
+        onScroll={(e) => e.stopPropagation()}
         style={{
           top: menuPos.top,
           left: menuPos.left,
           width: menuPos.width,
+          maxHeight: menuPos.maxHeight,
         }}
       >
         {options.length === 0 ? (
@@ -185,11 +230,7 @@ export default function Dropdown<T extends string>({
               role="option"
               aria-selected={o.value === value}
               className={`dropdown__option ${o.value === value ? "selected" : ""} ${i === highlight ? "highlighted" : ""}`}
-              onMouseEnter={() => setHighlight(i)}
-              onPointerDown={(e) => {
-                // Keep focus on trigger; select on pointerdown so the menu
-                // never loses the gesture to an outside-close race.
-                e.preventDefault();
+              onClick={(e) => {
                 e.stopPropagation();
                 onChange(o.value);
                 closeMenu();

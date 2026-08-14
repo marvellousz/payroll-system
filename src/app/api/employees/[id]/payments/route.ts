@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthProfile, logAudit } from "@/lib/audit";
-import { canViewMoney } from "@/lib/money-visibility";
+import { canAccessOutlet, getAuthProfile, logAudit } from "@/lib/audit";
+import { shouldHideEmployeeMoney } from "@/lib/money-visibility";
 import { netSalaryGiven } from "@/lib/payroll-server";
 
 async function verifyEmployee(employeeId: string, orgId: string) {
@@ -29,6 +29,9 @@ export async function GET(
 
   const employee = await verifyEmployee(id, profile.org_id);
   if (!employee) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!canAccessOutlet(profile, employee.outlet_id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const where: Record<string, unknown> = { employee_id: id };
   if (month) where.month = month;
@@ -40,7 +43,7 @@ export async function GET(
     include: { created_by_profile: { select: { username: true } } },
   });
 
-  if (!canViewMoney(profile)) {
+  if (shouldHideEmployeeMoney(profile, employee.salary_hidden)) {
     return NextResponse.json(payments.map((p) => ({ ...p, amount: "0" })));
   }
 
@@ -59,16 +62,20 @@ export async function POST(
   const body = await request.json();
   const { month, year, amount, paid_at, type } = body;
   const paymentType = type === "repayment" ? "repayment" : "salary";
+  const roundedAmount = Math.round(Number(amount));
 
   if (!month || !year || amount === undefined) {
     return NextResponse.json({ error: "month, year, and amount are required" }, { status: 400 });
   }
-  if (Number(amount) <= 0) {
-    return NextResponse.json({ error: "amount must be positive" }, { status: 400 });
+  if (!Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+    return NextResponse.json({ error: "amount must be a positive whole rupee" }, { status: 400 });
   }
 
   const employee = await verifyEmployee(id, profile.org_id);
   if (!employee) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!canAccessOutlet(profile, employee.outlet_id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const paidAt = paid_at ? new Date(paid_at) : new Date();
 
@@ -77,7 +84,7 @@ export async function POST(
       employee_id: id,
       month: Number(month),
       year: Number(year),
-      amount: Number(amount),
+      amount: roundedAmount,
       type: paymentType,
       paid_at: paidAt,
       created_by: profile.id,
@@ -97,8 +104,8 @@ export async function POST(
 
   const label =
     paymentType === "repayment"
-      ? `Repayment received ${formatPaidAt(paidAt)}: ₹${Number(amount).toLocaleString("en-IN")} (${employee.name})`
-      : `Salary paid ${formatPaidAt(paidAt)}: ₹${Number(amount).toLocaleString("en-IN")} (${employee.name})`;
+      ? `Repayment received ${formatPaidAt(paidAt)}: ₹${roundedAmount.toLocaleString("en-IN")} (${employee.name})`
+      : `Salary paid ${formatPaidAt(paidAt)}: ₹${roundedAmount.toLocaleString("en-IN")} (${employee.name})`;
 
   await logAudit({
     org_id: profile.org_id,

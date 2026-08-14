@@ -47,6 +47,9 @@ export default function DashboardClient() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
 
+  const { data: me } = useSWR<{ role: string }>(swrKeys.me());
+  const isAdmin = me?.role === "admin";
+
   const { data, isLoading, isValidating } = useSWR<{
     employees: Employee[];
     payroll: Record<string, PayrollData>;
@@ -79,10 +82,100 @@ export default function DashboardClient() {
   const totalPayroll = visiblePayroll.reduce((s, [, p]) => s + p.total_pay, 0);
   const totalGiven = visiblePayroll.reduce((s, [, p]) => s + p.salary_given, 0);
   const totalBalance = visiblePayroll.reduce((s, [, p]) => s + p.closing_balance, 0);
+  const totalAdvances = visiblePayroll.reduce(
+    (s, [, p]) => s + (p.closing_balance < 0 ? Math.abs(p.closing_balance) : 0),
+    0
+  );
 
   function money(emp: Employee, p: PayrollData | undefined, value: number) {
     if (emp.salary_masked || p?.salary_masked) return "—";
     return formatINR(value);
+  }
+
+  if (!me) {
+    return (
+      <div className="page-content flex items-center justify-center" style={{ padding: "6rem" }}>
+        <span className="spinner spinner-lg" />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="page-content staff-dashboard-page">
+        <div className="staff-dashboard-shell">
+          <div className="page-header">
+            <div>
+              <h1 className="page-title">Dashboard</h1>
+              <p className="page-subtitle">Monthly attendance overview</p>
+            </div>
+          </div>
+
+          <div className="staff-dashboard-month-nav" aria-label="Month navigation">
+            <button className="btn btn-ghost btn-icon" onClick={prevMonth} aria-label="Previous month">
+              <ChevronLeft size={18} strokeWidth={2.5} />
+            </button>
+            <span className="staff-dashboard-month-label">
+              {MONTHS[month - 1]} {year}
+              {isValidating && data ? " …" : ""}
+            </span>
+            <button className="btn btn-ghost btn-icon" onClick={nextMonth} aria-label="Next month">
+              <ChevronRight size={18} strokeWidth={2.5} />
+            </button>
+          </div>
+
+          {showSkeleton ? (
+            <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
+              <span className="spinner spinner-lg" />
+            </div>
+          ) : employees.length === 0 ? (
+            <div className="empty-state staff-empty-state">
+              <p className="empty-state__title">No employees in this outlet</p>
+              <p className="empty-state__desc">Add employees to see attendance for the month.</p>
+              <Link href="/employees" className="btn btn-primary mt-4">Add Employee</Link>
+            </div>
+          ) : (
+            <div className="staff-payroll-list">
+              {employees.map((emp) => {
+                const p = payrollMap[emp.id];
+                return (
+                  <div key={emp.id} className="staff-payroll-card">
+                    <div className="staff-payroll-card__header">
+                      <div className="staff-payroll-card__avatar">{emp.name.charAt(0).toUpperCase()}</div>
+                      <div className="staff-payroll-card__name">{emp.name}</div>
+                    </div>
+
+                    <div className="staff-payroll-card__section-label">Attendance</div>
+                    <div className="staff-payroll-card__rows">
+                      <div className="staff-payroll-card__row">
+                        <span>Days Present</span>
+                        <strong>{p?.days_present ?? 0}</strong>
+                      </div>
+                      <div className="staff-payroll-card__row">
+                        <span>Half Days</span>
+                        <strong>{p?.days_half ?? 0}</strong>
+                      </div>
+                      <div className="staff-payroll-card__row">
+                        <span>Days Absent (incl. unmarked)</span>
+                        <strong>{p?.days_absent ?? 0}</strong>
+                      </div>
+                      <div className="staff-payroll-card__row">
+                        <span>Paid Leave</span>
+                        <strong>{p?.paid_leave_days ?? emp.paid_leave_days} days</strong>
+                      </div>
+                      <div className="staff-payroll-card__row">
+                        <span>Payable Days</span>
+                        <strong>{p?.payable_days ?? 0}</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -119,7 +212,7 @@ export default function DashboardClient() {
 
       {selectedOutletId && employees.length > 0 && (
         <>
-          <div className="grid-3 mb-6">
+          <div className="grid-4 mb-6">
             <div className="card-flat-blue">
               <div className="stat-card__label text-blue">Total Payroll</div>
               <div className="stat-card__value text-blue">{formatINR(totalPayroll)}</div>
@@ -136,6 +229,11 @@ export default function DashboardClient() {
               <div className="stat-card__sub">
                 {totalBalance >= 0 ? "Owed to employees" : "Advance paid"}
               </div>
+            </div>
+            <div className="card-flat-rose">
+              <div className="stat-card__label text-danger">Total Advances</div>
+              <div className="stat-card__value text-danger">{formatINR(totalAdvances)}</div>
+              <div className="stat-card__sub">Paid beyond earned</div>
             </div>
           </div>
 
@@ -194,6 +292,7 @@ export default function DashboardClient() {
                           <div className="payroll-line"><span className="text-secondary">Half Days</span><span className="font-bold">{p.days_half}</span></div>
                           <div className="payroll-line"><span className="text-secondary">Days Absent</span><span className="font-bold">{p.days_absent}</span></div>
                           <div className="payroll-line"><span className="text-secondary">Paid Leave</span><span className="font-bold">{p.paid_leave_days}d</span></div>
+                          <div className="payroll-line"><span className="text-secondary">Overtime Days</span><span className="font-bold">{p.overtime_total_units ?? 0}</span></div>
                           <div className="payroll-line"><span className="text-secondary">Payable Days</span><span className="font-bold">{p.payable_days}</span></div>
                           <div className="payroll-line"><span className="text-secondary">Base Pay</span><span className="payroll-line__amount">{money(emp, p, p.base_pay)}</span></div>
                           <div className="payroll-line">

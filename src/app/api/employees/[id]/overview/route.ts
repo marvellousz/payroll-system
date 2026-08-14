@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthProfile } from "@/lib/audit";
-import { canViewMoney } from "@/lib/money-visibility";
+import { shouldHideEmployeeMoney } from "@/lib/money-visibility";
 import { prisma } from "@/lib/prisma";
 import { computeEmployeePayroll, type PayrollBreakdown } from "@/lib/payroll-server";
 
@@ -47,7 +47,7 @@ export async function GET(
 
   if (!computed) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const hideMoney = !canViewMoney(profile);
+  const hideMoney = shouldHideEmployeeMoney(profile, computed.employee.salary_hidden);
   const employee = hideMoney
     ? {
         ...computed.employee,
