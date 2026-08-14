@@ -157,9 +157,7 @@ export default function PayrollClient() {
                       <div className="payroll-line"><span className="text-secondary text-sm">Half Days</span><span>{p.days_half}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Days Absent (incl. unmarked)</span><span>{p.days_absent}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Paid Leave</span><span>{p.paid_leave_days} days</span></div>
-                      {!hideMoney && (
-                        <div className="payroll-line"><span className="text-secondary text-sm">Overtime Days</span><span>{p.overtime_total_units ?? 0}</span></div>
-                      )}
+                      <div className="payroll-line"><span className="text-secondary text-sm">Overtime Days</span><span>{p.overtime_total_units ?? 0}</span></div>
                       <div className="payroll-line"><span className="text-secondary text-sm">Payable Days</span><span>{p.payable_days}</span></div>
                       {!hideMoney && (
                         <>
@@ -212,8 +210,8 @@ export default function PayrollClient() {
                         </span>
                       </div>
                       <div style={{ marginTop: "0.75rem" }}>
-                        {p.closing_balance > 0 && <span className="badge badge-warning">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} owed to employee</span>}
-                        {p.closing_balance < 0 && <span className="badge badge-danger">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} advance paid</span>}
+                        {p.closing_balance > 0 && <span className="badge badge-warning">{formatINR(Math.abs(p.closing_balance))} owed to employee</span>}
+                        {p.closing_balance < 0 && <span className="badge badge-danger">{formatINR(Math.abs(p.closing_balance))} advance paid</span>}
                         {p.closing_balance === 0 && <span className="badge badge-success">Fully settled</span>}
                       </div>
                     </div>

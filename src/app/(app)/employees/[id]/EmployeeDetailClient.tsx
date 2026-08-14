@@ -277,8 +277,8 @@ export default function EmployeeDetailClient({ employeeId }: { employeeId: strin
                   <div className="payroll-line"><span className="text-secondary">Previous Balance</span><span className={`payroll-line__amount ${payroll.previous_balance < 0 ? "amount-negative" : ""}`}>{formatINR(payroll.previous_balance)}</span></div>
                   <div className="payroll-line total divider"><span>Closing Balance</span><span className={`payroll-line__amount ${payroll.closing_balance >= 0 ? "amount-positive" : "amount-negative"}`}>{formatINR(payroll.closing_balance)}</span></div>
                   <div className="mt-4">
-                    {payroll.closing_balance > 0 && <span className="badge badge-warning">₹{Math.abs(payroll.closing_balance).toLocaleString("en-IN")} owed to employee</span>}
-                    {payroll.closing_balance < 0 && <span className="badge badge-danger">₹{Math.abs(payroll.closing_balance).toLocaleString("en-IN")} advance paid</span>}
+                    {payroll.closing_balance > 0 && <span className="badge badge-warning">{formatINR(Math.abs(payroll.closing_balance))} owed to employee</span>}
+                    {payroll.closing_balance < 0 && <span className="badge badge-danger">{formatINR(Math.abs(payroll.closing_balance))} advance paid</span>}
                     {payroll.closing_balance === 0 && <span className="badge badge-success">Fully settled</span>}
                   </div>
                 </div>

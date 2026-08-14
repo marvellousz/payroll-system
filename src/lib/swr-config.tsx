@@ -65,5 +65,6 @@ export const swrKeys = {
   attendance: (employeeId: string, month: number, year: number) =>
     `/api/employees/${employeeId}/attendance?month=${month}&year=${year}`,
   auditLogs: (params: URLSearchParams) => `/api/audit-logs?${params.toString()}`,
+  auditBalances: (params: URLSearchParams) => `/api/audit-logs/balances?${params.toString()}`,
   users: () => "/api/users",
 };

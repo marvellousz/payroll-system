@@ -4,7 +4,7 @@ function formatMoney(value: string | null | undefined) {
   if (value == null || value === "") return "—";
   const n = Number(value);
   if (!Number.isFinite(n)) return value;
-  return `₹${n.toLocaleString("en-IN")}`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
 
 function titleCase(s: string) {
@@ -30,12 +30,28 @@ export function formatAuditDisplay(log: {
     };
   }
 
+  if (entity === "Employee" && (field === "deleted" || field === "removed")) {
+    return {
+      summary: "Employee deleted",
+      detail: log.old_value ? `${log.old_value} was removed` : "An employee was removed",
+    };
+  }
+
+  if (entity === "Outlet" && (field === "deleted" || field === "removed")) {
+    return {
+      summary: "Outlet deleted",
+      detail: [log.old_value, log.new_value].filter(Boolean).join(" · ") || "An outlet was removed",
+    };
+  }
+
   if (entity === "Profile" && (field === "deleted" || field === "removed")) {
     return {
       summary: "Staff deleted",
       detail: log.new_value
         ? `User removed: ${log.new_value}`
-        : "A staff user was removed",
+        : log.old_value
+          ? `User removed: ${log.old_value}`
+          : "A staff user was removed",
     };
   }
 

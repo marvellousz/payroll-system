@@ -164,6 +164,10 @@ export default function DashboardClient() {
                         <strong>{p?.paid_leave_days ?? emp.paid_leave_days} days</strong>
                       </div>
                       <div className="staff-payroll-card__row">
+                        <span>Overtime Days</span>
+                        <strong>{p?.overtime_total_units ?? 0}</strong>
+                      </div>
+                      <div className="staff-payroll-card__row">
                         <span>Payable Days</span>
                         <strong>{p?.payable_days ?? 0}</strong>
                       </div>
@@ -312,8 +316,8 @@ export default function DashboardClient() {
                           <div className="payroll-line"><span className="text-secondary">Previous Balance</span><span className={`payroll-line__amount ${p.previous_balance >= 0 ? "" : "amount-negative"}`}>{money(emp, p, p.previous_balance)}</span></div>
                           <div className="payroll-line total divider"><span>Current Balance</span><span className={`payroll-line__amount ${p.closing_balance >= 0 ? "amount-positive" : "amount-negative"}`}>{money(emp, p, p.closing_balance)}</span></div>
                           <div style={{ marginTop: "1rem" }}>
-                            {p.closing_balance > 0 && <span className="badge badge-warning">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} Owed</span>}
-                            {p.closing_balance < 0 && <span className="badge badge-danger">₹{Math.abs(p.closing_balance).toLocaleString("en-IN")} Advance</span>}
+                            {p.closing_balance > 0 && <span className="badge badge-warning">{formatINR(Math.abs(p.closing_balance))} Owed</span>}
+                            {p.closing_balance < 0 && <span className="badge badge-danger">{formatINR(Math.abs(p.closing_balance))} Advance</span>}
                             {p.closing_balance === 0 && <span className="badge badge-success">Fully Settled</span>}
                           </div>
                         </div>

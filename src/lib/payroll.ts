@@ -43,12 +43,12 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
 
   const daily_rate = salary / 30;
   const payable_days = 30 - absent - 0.5 * half + paidLeave;
-  const base_pay = round2(daily_rate * payable_days);
-  const overtime_pay = round2(otUnits * otRate);
-  const total_pay = round2(base_pay + overtime_pay);
+  const base_pay = roundRupee(daily_rate * payable_days);
+  const overtime_pay = roundRupee(otUnits * otRate);
+  const total_pay = roundRupee(base_pay + overtime_pay);
 
   return {
-    daily_rate: round2(daily_rate),
+    daily_rate: roundRupee(daily_rate),
     payable_days,
     base_pay,
     overtime_pay,
@@ -61,31 +61,34 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
  *
  *   monthly_balance = total_pay - salary_given
  *   closing_balance = previous_balance + monthly_balance
+ *
+ * All money values are rounded to the nearest rupee (22.3 → 22, 22.5 → 23).
  */
 export function calculateBalance(
   total_pay: number,
   salary_given: number,
   previous_balance: number
 ) {
-  const monthly_balance = round2(total_pay - salary_given);
-  const closing_balance = round2(previous_balance + monthly_balance);
+  const monthly_balance = roundRupee(roundRupee(total_pay) - roundRupee(salary_given));
+  const closing_balance = roundRupee(roundRupee(previous_balance) + monthly_balance);
   return { monthly_balance, closing_balance };
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+export function roundRupee(n: number): number {
+  return Math.round(Number(n) || 0);
 }
 
 /**
- * Format a number as Indian Rupee currency string.
+ * Format a number as Indian Rupee currency string (whole rupees).
  */
 export function formatINR(amount: number): string {
-  const abs = Math.abs(amount);
+  const rounded = roundRupee(amount);
+  const abs = Math.abs(rounded);
   const formatted = new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0,
   }).format(abs);
-  return amount < 0 ? `-${formatted}` : formatted;
+  return rounded < 0 ? `-${formatted}` : formatted;
 }

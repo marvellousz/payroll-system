@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { calculateBalance, calculatePayroll } from "@/lib/payroll";
+import { calculateBalance, calculatePayroll, roundRupee } from "@/lib/payroll";
 
 export type PayrollBreakdown = {
   employee_id: string;
@@ -116,8 +116,8 @@ export function buildPayrollBreakdown(
       r.overtime_units != null &&
       Number(r.overtime_units) > 0
   ).length;
-  const salary_given = netSalaryGiven(payments);
-  const previous_balance = prevSummary ? Number(prevSummary.closing_balance) : 0;
+  const salary_given = roundRupee(netSalaryGiven(payments));
+  const previous_balance = prevSummary ? roundRupee(Number(prevSummary.closing_balance)) : 0;
 
   const override =
     options?.overtimeRateOverride != null && Number.isFinite(Number(options.overtimeRateOverride))

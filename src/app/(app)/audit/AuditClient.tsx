@@ -6,7 +6,15 @@ import Dropdown from "@/components/Dropdown";
 import DatePicker from "@/components/DatePicker";
 import { useOutlets } from "@/lib/outlet-context";
 import { formatAuditDisplay, shouldHighlightAudit } from "@/lib/audit-format";
+import { formatINR } from "@/lib/payroll";
 import { swrKeys } from "@/lib/swr-config";
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const BALANCES_TYPE = "balances";
 
 interface AuditLogItem {
   id: string;
@@ -75,27 +83,45 @@ export default function AuditClient() {
   const allSelected =
     outlets.length > 0 && selectedOutletIds.length === outlets.length;
 
-  const params = useMemo(() => {
+  const showingBalances = entityType === BALANCES_TYPE;
+
+  const outletQuery = useMemo(() => {
     if (!selectedOutletIds.length) return null;
     const p = new URLSearchParams();
-    if (isAdmin && allSelected) {
-      p.set("all", "1");
-    } else {
-      p.set("outlet_ids", selectedOutletIds.join(","));
-    }
+    if (isAdmin && allSelected) p.set("all", "1");
+    else p.set("outlet_ids", selectedOutletIds.join(","));
+    return p;
+  }, [selectedOutletIds, allSelected, isAdmin]);
+
+  const params = useMemo(() => {
+    if (!outletQuery || showingBalances) return null;
+    const p = new URLSearchParams(outletQuery);
     p.set("page", String(page));
     p.set("limit", "25");
     if (entityType) p.set("entity_type", entityType);
     if (dateFrom) p.set("date_from", dateFrom);
     if (dateTo) p.set("date_to", dateTo);
     return p;
-  }, [selectedOutletIds, allSelected, isAdmin, page, entityType, dateFrom, dateTo]);
+  }, [outletQuery, showingBalances, page, entityType, dateFrom, dateTo]);
 
   const { data, isLoading, mutate } = useSWR<{
     logs: AuditLogItem[];
     total: number;
     pages: number;
   }>(params ? swrKeys.auditLogs(params) : null);
+
+  const { data: balancesData, isLoading: balancesLoading } = useSWR<{
+    month: number;
+    year: number;
+    items: {
+      id: string;
+      name: string;
+      outlet_id: string;
+      outlet_name: string;
+      amount: number;
+      status: "advance" | "owed";
+    }[];
+  }>(showingBalances && outletQuery ? swrKeys.auditBalances(outletQuery) : null);
 
   const logs = data?.logs ?? [];
   const total = data?.total ?? 0;
@@ -158,9 +184,11 @@ export default function AuditClient() {
         <div>
           <h1 className="page-title">Audit Logs</h1>
           <p className="page-subtitle">
-            {selectedOutletIds.length
-              ? `${outletFilterLabel} · readable history (${total} total)`
-              : "Select at least one outlet"}
+            {!selectedOutletIds.length
+              ? "Select at least one outlet"
+              : showingBalances
+                ? `${outletFilterLabel} · employees with a non-zero balance`
+                : `${outletFilterLabel} · readable history (${total} total)`}
           </p>
         </div>
         {isAdmin && selectedOutletIds.length > 0 && (
@@ -193,37 +221,42 @@ export default function AuditClient() {
                 { value: "PayrollSummary", label: "Payroll" },
                 { value: "SalaryPayment", label: "Salary Payment" },
                 { value: "SalaryAdjustment", label: "Salary Adjustment" },
-                { value: "deleted", label: "Deleted" },
                 { value: "OvertimeRateAdjustment", label: "OT Rate" },
                 { value: "Outlet", label: "Outlet" },
                 { value: "Profile", label: "Users" },
-                { value: "AuditLog", label: "Audit meta" },
+                { value: "deleted", label: "Deleted" },
+                { value: BALANCES_TYPE, label: "Advances and outstanding" },
+                { value: "AuditLog", label: "Audit deletes" },
               ]}
               label="Entity Type"
             />
           </div>
 
-          <div className="form-group" style={{ flex: "1 1 160px" }}>
-            <DatePicker
-              label="From Date"
-              value={dateFrom}
-              onChange={(v) => {
-                setDateFrom(v);
-                setPage(1);
-              }}
-            />
-          </div>
+          {!showingBalances && (
+            <>
+              <div className="form-group" style={{ flex: "1 1 160px" }}>
+                <DatePicker
+                  label="From Date"
+                  value={dateFrom}
+                  onChange={(v) => {
+                    setDateFrom(v);
+                    setPage(1);
+                  }}
+                />
+              </div>
 
-          <div className="form-group" style={{ flex: "1 1 160px" }}>
-            <DatePicker
-              label="To Date"
-              value={dateTo}
-              onChange={(v) => {
-                setDateTo(v);
-                setPage(1);
-              }}
-            />
-          </div>
+              <div className="form-group" style={{ flex: "1 1 160px" }}>
+                <DatePicker
+                  label="To Date"
+                  value={dateTo}
+                  onChange={(v) => {
+                    setDateTo(v);
+                    setPage(1);
+                  }}
+                />
+              </div>
+            </>
+          )}
 
           {(entityType || dateFrom || dateTo) && (
             <div style={{ marginTop: "auto" }}>
@@ -280,13 +313,46 @@ export default function AuditClient() {
         <div className="card text-center text-muted" style={{ padding: "2rem" }}>
           Select at least one outlet to view audit logs.
         </div>
+      ) : showingBalances ? (
+        balancesLoading && !balancesData ? (
+          <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
+            <span className="spinner spinner-lg" />
+          </div>
+        ) : (balancesData?.items.length ?? 0) === 0 ? (
+          <div className="empty-state">
+            <p className="empty-state__title">No advances or outstanding balances</p>
+            <p className="empty-state__desc">Everyone in the selected outlets is fully settled this month.</p>
+          </div>
+        ) : (
+          <div className="card">
+            <div className="text-muted text-xs font-bold uppercase mb-2">
+              {MONTHS[(balancesData?.month ?? 1) - 1]} {balancesData?.year} · {balancesData?.items.length}{" "}
+              {(balancesData?.items.length ?? 0) === 1 ? "employee" : "employees"}
+            </div>
+            {balancesData!.items.map((item) => (
+              <div key={item.id} className="payroll-line">
+                <div>
+                  <span className="font-semibold">{item.name}</span>
+                  {(allSelected || selectedOutletIds.length > 1) && (
+                    <div className="text-muted text-xs">{item.outlet_name}</div>
+                  )}
+                </div>
+                <span className={`font-bold ${item.status === "advance" ? "amount-negative" : "amount-positive"}`}>
+                  {formatINR(item.amount)} {item.status === "advance" ? "advance" : "owed"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )
       ) : isLoading && !data ? (
         <div className="flex items-center justify-center" style={{ padding: "4rem" }}>
           <span className="spinner spinner-lg" />
         </div>
       ) : logs.length === 0 ? (
         <div className="empty-state">
-          <p className="empty-state__title">No audit records found</p>
+          <p className="empty-state__title">
+            {entityType === "deleted" ? "No deleted records found" : "No audit records found"}
+          </p>
           <p className="empty-state__desc">Try adjusting your filters or outlet selection.</p>
         </div>
       ) : (
@@ -335,7 +401,9 @@ export default function AuditClient() {
                       )}
                       <td>
                         <span className="font-semibold text-sm">{display.summary}</span>
-                        <div className="text-muted text-xs mt-1">{log.entity_type}</div>
+                        {entityType !== "deleted" && (
+                          <div className="text-muted text-xs mt-1">{log.entity_type}</div>
+                        )}
                       </td>
                       <td
                         className="text-sm"
