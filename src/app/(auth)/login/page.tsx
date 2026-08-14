@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { CircleAlert } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -26,7 +27,7 @@ export default function LoginPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username: email }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.email) {
           setError("Username not found. Please check and try again.");
           return;
@@ -51,6 +52,8 @@ export default function LoginPage() {
 
       router.push("/dashboard");
       router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign in failed.");
     } finally {
       setLoading(false);
     }
@@ -82,6 +85,9 @@ export default function LoginPage() {
         </h1>
         <p className="text-secondary text-sm font-medium" style={{ marginTop: "0.25rem" }}>
           Sign in to your account
+        </p>
+        <p className="text-muted text-sm" style={{ marginTop: "0.65rem" }}>
+          <Link href="/" style={{ color: "var(--color-text-secondary)" }}>← Back</Link>
         </p>
       </div>
 

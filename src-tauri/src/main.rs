@@ -76,6 +76,29 @@ fn load_dotenv(path: &Path) -> Vec<(String, String)> {
 }
 
 #[cfg(not(debug_assertions))]
+fn find_server_js(dir: &Path) -> Option<PathBuf> {
+    let candidate = dir.join("server.js");
+    if candidate.is_file() {
+        return Some(candidate);
+    }
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        if name == "node_modules" || name == ".next" {
+            continue;
+        }
+        if let Some(found) = find_server_js(&path) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+#[cfg(not(debug_assertions))]
 fn start_server(app: &tauri::App, port: u16) -> Result<(), Box<dyn std::error::Error>> {
     let resource_dir = strip_verbatim(app.path().resource_dir()?);
     let app_data = strip_verbatim(app.path().app_data_dir()?);
@@ -86,8 +109,14 @@ fn start_server(app: &tauri::App, port: u16) -> Result<(), Box<dyn std::error::E
     #[cfg(not(windows))]
     let node = resource_dir.join("node");
 
-    let server_dir = resource_dir.join("server");
-    let server_js = server_dir.join("server.js");
+    let mut server_dir = resource_dir.join("server");
+    let server_js = find_server_js(&server_dir).ok_or_else(|| {
+        format!("Bundled server missing under {}", server_dir.display())
+    })?;
+    server_dir = server_js
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or(server_dir);
     let env_file = server_dir.join(".env");
 
     if !node.exists() {
@@ -111,6 +140,9 @@ fn start_server(app: &tauri::App, port: u16) -> Result<(), Box<dyn std::error::E
         .stderr(Stdio::from(log_err));
 
     for (k, v) in load_dotenv(&env_file) {
+        if k == "PORT" || k == "HOSTNAME" || k == "NODE_ENV" {
+            continue;
+        }
         cmd.env(k, v);
     }
 

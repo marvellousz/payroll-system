@@ -17,12 +17,12 @@ Open http://localhost:3000
 
 ## Windows desktop app
 
-See **[WINDOWS.md](./WINDOWS.md)** for the full Tauri setup.
+See **[WINDOWS.md](./WINDOWS.md)**.
 
-Quick reference (on a Windows build PC):
+Electron (separate from Tauri), on a Windows PC:
 
 ```bat
 npm install
-npm run tauri:dev      :: development desktop window
-npm run tauri:build    :: produces NSIS installer for the client
+npm run electron:dev     :: desktop window (starts Next if needed)
+npm run electron:build   :: NSIS installer + portable exe
 ```

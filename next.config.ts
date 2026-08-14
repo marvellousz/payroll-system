@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
   ...(isDesktopBuild
     ? {
         output: "standalone" as const,
+        outputFileTracingIncludes: {
+          "*": [
+            "./node_modules/.prisma/client/**/*",
+            "./node_modules/@prisma/client/**/*",
+          ],
+        },
         outputFileTracingExcludes: {
           "*": [
             "./src-tauri/**/*",

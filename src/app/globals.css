@@ -1603,6 +1603,49 @@ h5 { font-size: 1rem; font-weight: 600; }
   padding: 2.25rem;
 }
 
+.landing-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+.landing-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 16px;
+  padding: 1.75rem 1.5rem;
+  color: var(--color-text-primary);
+  text-decoration: none;
+  min-height: 200px;
+}
+.landing-choice:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+.landing-choice__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+}
+.landing-choice strong {
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+.landing-choice span:last-child {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 /* ─── Responsive helpers ─────────────────────────────────────────────────────── */
 .card-header-row {
   display: flex;
@@ -1676,6 +1719,7 @@ h5 { font-size: 1rem; font-weight: 600; }
 
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .landing-choices { grid-template-columns: 1fr; }
   .attendance-stats {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.75rem;

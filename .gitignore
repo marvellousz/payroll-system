@@ -46,3 +46,13 @@ src-tauri/resources/server/
 src-tauri/resources/node
 src-tauri/resources/node.exe
 src-tauri/resources/_node_tmp/
+
+# electron desktop bundle artifacts
+/dist-electron/
+src-electron/resources/server/
+src-electron/resources/node
+src-electron/resources/node.exe
+src-electron/resources/_node_tmp/
+
+# Windows installer hosted for the landing-page download button
+public/downloads/*.exe

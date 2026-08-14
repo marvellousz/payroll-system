@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /**
- * Prepares Next.js standalone + portable Node for the Tauri desktop bundle.
- * Run via: npm run desktop:prepare  (also used by tauri:build)
- *
- * Build the Windows installer ON a Windows machine (WebView2 + MSVC tools required).
+ * Prepares Next.js standalone + portable Node for desktop bundles.
+ * Tauri:  npm run desktop:prepare
+ * Electron: npm run electron:prepare  (writes to src-electron/resources)
  */
 import { execSync } from "node:child_process";
 import {
@@ -15,6 +14,7 @@ import {
   chmodSync,
   copyFileSync,
   writeFileSync,
+  readdirSync,
 } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { join, dirname } from "node:path";
@@ -23,7 +23,12 @@ import { Readable } from "node:stream";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
-const resources = join(root, "src-tauri", "resources");
+const resourcesArg = process.argv[2];
+const resources = resourcesArg
+  ? (resourcesArg.startsWith("/") || /^[A-Za-z]:[\\/]/.test(resourcesArg)
+      ? resourcesArg
+      : join(root, resourcesArg))
+  : join(root, "src-tauri", "resources");
 const serverOut = join(resources, "server");
 const NODE_VERSION = "20.18.1";
 
@@ -110,6 +115,45 @@ async function fetchPortableNode() {
   log(`Portable Node ready: ${nodeDest}`);
 }
 
+function findServerJs(dir, depth = 0) {
+  if (depth > 8) return null;
+  const direct = join(dir, "server.js");
+  if (existsSync(direct)) return direct;
+  let entries = [];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === "node_modules" || entry.name === ".next") continue;
+    const found = findServerJs(join(dir, entry.name), depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function copyInto(src, dest) {
+  if (!existsSync(src)) return;
+  ensureDir(dirname(dest));
+  cpSync(src, dest, { recursive: true });
+}
+
+function copyPrismaIntoStandalone(serverRoot) {
+  const copies = [
+    ["node_modules/.prisma", join(serverRoot, "node_modules", ".prisma")],
+    ["node_modules/@prisma/client", join(serverRoot, "node_modules", "@prisma", "client")],
+    ["node_modules/@prisma/engines", join(serverRoot, "node_modules", "@prisma", "engines")],
+  ];
+  for (const [rel, dest] of copies) {
+    const src = join(root, rel);
+    if (!existsSync(src)) continue;
+    copyInto(src, dest);
+    log(`Copied ${rel}`);
+  }
+}
+
 function stageStandalone() {
   const standalone = join(root, ".next", "standalone");
   if (!existsSync(standalone)) {
@@ -120,17 +164,25 @@ function stageStandalone() {
   ensureDir(serverOut);
   cpSync(standalone, serverOut, { recursive: true });
 
+  const serverJs = findServerJs(serverOut);
+  if (!serverJs) {
+    throw new Error(`Could not find server.js under ${serverOut}`);
+  }
+  const serverRoot = dirname(serverJs);
+  log(`Standalone server entry: ${serverJs}`);
+
   const staticSrc = join(root, ".next", "static");
-  const staticDest = join(serverOut, ".next", "static");
+  const staticDest = join(serverRoot, ".next", "static");
   if (existsSync(staticSrc)) {
-    ensureDir(dirname(staticDest));
-    cpSync(staticSrc, staticDest, { recursive: true });
+    copyInto(staticSrc, staticDest);
   }
 
   const publicSrc = join(root, "public");
   if (existsSync(publicSrc)) {
-    cpSync(publicSrc, join(serverOut, "public"), { recursive: true });
+    copyInto(publicSrc, join(serverRoot, "public"));
   }
+
+  copyPrismaIntoStandalone(serverRoot);
 
   const envSrc = existsSync(join(root, ".env"))
     ? join(root, ".env")
@@ -143,6 +195,7 @@ function stageStandalone() {
       "No .env or .env.local found. Desktop build needs Supabase/DB env vars."
     );
   }
+  copyFileSync(envSrc, join(serverRoot, ".env"));
   copyFileSync(envSrc, join(serverOut, ".env"));
   log(`Staged server + env from ${envSrc}`);
 }

@@ -4,11 +4,22 @@ import { preload, SWRConfig } from "swr";
 
 async function fetcher<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed (${res.status})`);
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(
+      res.ok
+        ? "Server returned a page instead of data. Rebuild the Windows app after updating."
+        : `Request failed (${res.status})`
+    );
   }
-  return res.json() as Promise<T>;
+  if (!res.ok) {
+    const err = body && typeof body === "object" && "error" in body ? (body as { error?: string }).error : null;
+    throw new Error(err ?? `Request failed (${res.status})`);
+  }
+  return body as T;
 }
 
 export function SWRProvider({ children }: { children: React.ReactNode }) {

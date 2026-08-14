@@ -1,29 +1,19 @@
-# Windows Desktop App (Tauri)
+# Windows Desktop App
 
-Payroll ships as a **native Windows app** (`.exe` / NSIS installer).  
-The installer bundles:
+Two packaging options:
 
-- the Next.js server (API + UI)
-- a portable Node.js runtime  
-- your `.env` Supabase credentials (copied at build time)
+- **Electron** (`src-electron`) — recommended Windows installer
+- **Tauri** (`src-tauri`) — previous wrapper (needs Rust)
 
-Clients do **not** need to install Node separately.
+Both bundle the Next.js server + a portable Node runtime + `.env`. Clients do **not** need to install Node.
 
 ---
 
-## One-time setup on the Windows build PC
+## Electron (recommended)
 
-1. Install **[Node.js 20 LTS](https://nodejs.org/)**  
-2. Install **[Rust](https://rustup.rs/)** (`rustup` default toolchain)  
-3. Install **[Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)**  
-   - Workload: **Desktop development with C++**  
-4. WebView2 is included on Windows 10/11 (install [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/) if missing)
+On the Windows build PC you only need **[Node.js 20 LTS](https://nodejs.org/)**.
 
----
-
-## Configure env
-
-In the project root, create `.env` (same keys as web):
+`.env` in the project root (same keys as web):
 
 ```env
 DATABASE_URL=...
@@ -33,45 +23,59 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-Apply schema + seed once (against your Supabase DB):
+### Dev
 
 ```bat
 npm install
-npx prisma generate
-npx prisma db push
-npm run seed
+npm run electron:dev
 ```
+
+Opens a desktop window. If Next is not already running, it starts `npm run dev` for you.
+
+### Build installer
+
+```bat
+npm run electron:build
+```
+
+Output:
+
+- `dist-electron\Payroll-Setup.exe` — installer for the client
+- `dist-electron\Payroll-Portable.exe` — no-install exe
+
+Upload `Payroll-Setup.exe` as a GitHub Release asset named **Payroll-Setup.exe** for the website Download button.
+
+Logs: `%APPDATA%\payroll-system\server.log`
 
 ---
 
-## Dev (desktop window + hot reload)
+## Tauri
+
+1. Install **[Node.js 20 LTS](https://nodejs.org/)**  
+2. Install **[Rust](https://rustup.rs/)** (`rustup` default toolchain)  
+3. Install **[Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)**  
+   - Workload: **Desktop development with C++**  
+4. WebView2 is included on Windows 10/11 (install [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/) if missing)
 
 ```bat
 npm run tauri:dev
-```
-
-This starts `next dev` and opens the Tauri window at `http://localhost:3000`.
-
----
-
-## Build Windows installer for the client
-
-```bat
 npm run tauri:build
 ```
 
-Output (typical paths):
+---
 
-- `src-tauri\target\release\Payroll.exe` — portable binary  
-- `src-tauri\target\release\bundle\nsis\*.exe` — **installer for the client**
+## Website download button
 
-Give the client the **NSIS installer**. After install they launch **Payroll** from the Start Menu.
+The landing page **Download the app** button uses this Google Drive file:
+
+https://drive.google.com/file/d/1rE6WSFwZCDvp8NiZVVhFrAb2fVLtbcnZ/view?usp=drivesdk
+
+The file must be shared as **Anyone with the link**. To use a different file later, set `NEXT_PUBLIC_APP_DOWNLOAD_URL` on Vercel.
 
 ---
 
 ## Notes
 
-- Build the Windows installer **on Windows**. Cross-compiling from Linux/macOS is not supported by this setup.  
-- `.env` is embedded into the app resources at build time — rebuild if credentials change.  
-- Logs for the bundled server: `%APPDATA%\com.payroll.app\server.log` (folder name may vary slightly by OS app-data rules).  
+- Build the Windows installer **on Windows**.
+- `.env` is copied into the app at build time — rebuild if credentials change.
 - Internet is still required at runtime (Supabase Auth + Postgres).

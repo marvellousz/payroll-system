@@ -12,7 +12,10 @@
     "desktop:prepare": "node scripts/prepare-desktop.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "electron:dev": "electron src-electron/main.cjs",
+    "electron:prepare": "node scripts/prepare-desktop.mjs src-electron/resources",
+    "electron:build": "node scripts/prepare-desktop.mjs src-electron/resources && electron-builder --win --config src-electron/electron-builder.yml"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"
@@ -38,6 +41,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tsx": "^4.23.12",
